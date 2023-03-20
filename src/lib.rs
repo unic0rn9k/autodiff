@@ -1,6 +1,11 @@
 #![feature(test)]
 
+use std::ops;
+mod anon;
+
+#[cfg(test)]
 mod test;
+pub use anon::{symbol, AnonymousSymbol};
 
 //#![feature(adt_const_params)]
 
@@ -9,8 +14,8 @@ mod test;
 
 use std::marker::PhantomData;
 
-#[derive(Debug)]
-struct DiffNode<'a, N: Differentiable<'a>> {
+#[derive(Debug, Clone)]
+pub struct DiffNode<'a, N: Differentiable<'a>> {
     //, const SYMBOL: &'static str> {
     //data: Option<N::T>,
     symbol: &'static str,
@@ -18,7 +23,10 @@ struct DiffNode<'a, N: Differentiable<'a>> {
     marker: PhantomData<&'a ()>,
 }
 
-impl<'a> Differentiable<'a> for DiffNode<'a, f32> {
+impl<'a, N: Differentiable<'a, T = f32>> Differentiable<'a> for DiffNode<'a, N>
+where
+    N::Δ: Differentiable<'a, T = f32>,
+{
     type Δ = f32;
     type T = f32;
 
@@ -26,14 +34,44 @@ impl<'a> Differentiable<'a> for DiffNode<'a, f32> {
         self.node.eval()
     }
 
-    fn derivative(&self, k: &[&str]) -> Vec<Self::Δ> {
+    fn derivative(&'a self, k: &[&str]) -> Vec<Self::Δ> {
         k.iter()
-            .map(|k| if k == &self.symbol { 1. } else { 0. })
+            .map(|k| {
+                if k == &self.symbol {
+                    1.
+                } else {
+                    self.node.derivative(&[k])[0].eval()
+                }
+            })
             .collect()
     }
 }
 
-trait Differentiable<'a> {
+macro_rules! impl_self_and_ref {
+    (impl<$($t:tt$(:$t2:path)?),*> $op:ty => for $self:ty => $($body:tt)*) => {
+        impl<$($t$(:$t2)?),*> $op for $self $($body)*
+        impl<$($t$(:$t2)?),*> $op for &'a $self $($body)*
+    };
+}
+
+macro_rules! impl_f32_op {
+    ($($Op:ident:$op: ident)*) => {
+        $(impl_self_and_ref! {
+            impl<'a, L: Differentiable<'a, T = f32>, R: Differentiable<'a, T = f32>> ops::$Op<R>
+            => for DiffNode<'a, L> => where L:'a + Clone, R: 'a, L::Δ: Differentiable<'a, T=f32>,R::Δ: Differentiable<'a, T=f32>{
+                type Output = DiffNode<'a, $Op<DiffNode<'a,L>, R>>;
+
+                fn $op(self, rhs: R) -> Self::Output {
+                    DiffNode{node:$Op(self.clone(), rhs),symbol:"",marker:PhantomData}
+                }
+            }
+        })*
+    };
+}
+
+impl_f32_op!(Add:add Mul:mul);
+
+pub trait Differentiable<'a> {
     type Δ;
     type T;
 
@@ -80,7 +118,8 @@ impl<'a> Differentiable<'a> for f32 {
     }
 }
 
-struct Add<Lhs, Rhs>(Lhs, Rhs);
+#[derive(Clone)]
+pub struct Add<Lhs, Rhs>(Lhs, Rhs);
 
 impl<'a, Lhs: Differentiable<'a, T = f32>, Rhs: Differentiable<'a, T = f32>> Differentiable<'a>
     for Add<Lhs, Rhs>
@@ -102,7 +141,8 @@ impl<'a, Lhs: Differentiable<'a, T = f32>, Rhs: Differentiable<'a, T = f32>> Dif
     }
 }
 
-struct Mul<Lhs, Rhs>(Lhs, Rhs);
+#[derive(Clone)]
+pub struct Mul<Lhs, Rhs>(Lhs, Rhs);
 
 impl<'a, Lhs: Differentiable<'a, T = f32> + 'a, Rhs: Differentiable<'a, T = f32> + 'a>
     Differentiable<'a> for Mul<Lhs, Rhs>
@@ -142,11 +182,16 @@ impl_debug!(+Add);
 fn basic() {
     let x = 2f32.symbol("x");
     let y = 3f32.symbol("y");
-    let f = Add(Mul(&x, &y), Mul(&x, &x));
+    let f = &x * &y + &x * &x;
+
     assert_eq!(f.eval(), 10.);
     let delta = f.derivative(&["x", "y"]);
     println!("dx={:?}", delta[0]);
     println!("dy={:?}", delta[1]);
     assert_eq!(delta[0].eval(), 7.);
     assert_eq!(delta[1].eval(), 2.);
+
+    //let x = symbol::<f32>("x");
+    //let f = x * (1.2f32).symbol("");
+    //f.derivate()
 }
