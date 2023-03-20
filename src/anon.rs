@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 
 use crate::{DiffNode, Differentiable};
 
+#[derive(Clone)]
 pub struct AnonymousSymbol<T>(PhantomData<T>);
 
 impl<'a> Differentiable<'a> for AnonymousSymbol<f32> {

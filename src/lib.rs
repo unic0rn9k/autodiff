@@ -7,11 +7,6 @@ mod anon;
 mod test;
 pub use anon::{symbol, AnonymousSymbol};
 
-//#![feature(adt_const_params)]
-
-//#[derive(PartialEq, Copy, Clone)]
-//struct NodeId(*const ());
-
 use std::marker::PhantomData;
 
 #[derive(Debug, Clone)]
@@ -184,12 +179,14 @@ fn basic() {
     let y = 3f32.symbol("y");
     let f = &x * &y + &x * &x;
 
+    let [dx, dy] = f.derivative(&["x", "y"])[..] else {unreachable!()};
+
+    println!("dx = {dx:?}");
+    println!("dy = {dy:?}");
+
     assert_eq!(f.eval(), 10.);
-    let delta = f.derivative(&["x", "y"]);
-    println!("dx={:?}", delta[0]);
-    println!("dy={:?}", delta[1]);
-    assert_eq!(delta[0].eval(), 7.);
-    assert_eq!(delta[1].eval(), 2.);
+    assert_eq!(dx.eval(), 7.);
+    assert_eq!(dy.eval(), 2.);
 
     //let x = symbol::<f32>("x");
     //let f = x * (1.2f32).symbol("");
