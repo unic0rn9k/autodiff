@@ -1,8 +1,7 @@
 use flamer::flame;
 extern crate test;
+use crate::Differentiable;
 use test::{black_box, Bencher};
-
-use crate::*;
 
 #[flame]
 #[bench]
@@ -10,7 +9,7 @@ fn basic(b: &mut Bencher) {
     let x = black_box(2f32.symbol("x"));
     let y = black_box(3f32.symbol("y"));
     b.iter(|| {
-        black_box(Add(Mul(&x, &y), Mul(&x, &x))).eval();
+        black_box(&x * &y + &x * &x).eval();
         //assert_eq!(f.eval(), 10.);
         //black_box(f.derivative(&["x", "y"])[0].eval());
         //println!("dx={:?}", delta[0]);
