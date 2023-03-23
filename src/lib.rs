@@ -3,6 +3,7 @@
 use std::{fmt::Debug, marker::PhantomData};
 mod symbol;
 
+mod scalar;
 #[cfg(test)]
 mod test;
 pub use symbol::{symbol, AnonymousSymbol, Symbol};
