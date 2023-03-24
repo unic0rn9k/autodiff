@@ -1,17 +1,17 @@
 use nalgebra::{ArrayStorage, Const, Matrix};
 
 use crate::{Differentiable, Node};
-use std::marker::PhantomData;
 
-/// When `TYPE='s'`, it is a scalar implementation. When it is 'm', it is a matrix implementation.
 #[derive(Clone)]
-pub struct Add<Lhs, Rhs, const TYPE: char = 's'>(pub Lhs, pub Rhs);
+pub struct Add<Lhs, Rhs>(pub Lhs, pub Rhs);
 
-impl<'a, Lhs: Differentiable<'a, T = f32>, Rhs: Differentiable<'a, T = f32>> Differentiable<'a>
-    for Add<Lhs, Rhs>
+impl<'a, L, R, LNode: Differentiable<'a, T = L>, RNode: Differentiable<'a, T = R>>
+    Differentiable<'a> for Add<LNode, RNode>
+where
+    L: std::ops::Add<R>,
 {
-    type Δ = Add<Lhs::Δ, Rhs::Δ>;
-    type T = f32;
+    type Δ = Add<LNode::Δ, RNode::Δ>;
+    type T = <L as std::ops::Add<R>>::Output;
 
     fn eval(&self) -> Self::T {
         self.0.eval() + self.1.eval()
@@ -25,34 +25,8 @@ impl<'a, Lhs: Differentiable<'a, T = f32>, Rhs: Differentiable<'a, T = f32>> Dif
     }
 }
 
-impl<
-        'a,
-        S1: nalgebra::Storage<f32, nalgebra::Const<R>, nalgebra::Const<C>>,
-        S2: nalgebra::Storage<f32, nalgebra::Const<R>, nalgebra::Const<C>>,
-        const R: usize,
-        const C: usize,
-        Lhs: Differentiable<'a, T = Matrix<f32, Const<R>, Const<C>, S1>>,
-        Rhs: Differentiable<'a, T = Matrix<f32, Const<R>, Const<C>, S2>>,
-    > Differentiable<'a> for Add<Lhs, Rhs, 'm'>
-{
-    type Δ = Add<Lhs::Δ, Rhs::Δ>;
-    type T = Matrix<f32, Const<R>, Const<C>, ArrayStorage<f32, R, C>>;
-
-    fn eval(&self) -> Self::T {
-        self.0.eval() + self.1.eval()
-    }
-
-    fn derivative<const LEN: usize>(&'a self, k: &[&str; LEN]) -> [Self::Δ; LEN] {
-        self.0
-            .derivative(k)
-            .zip(self.1.derivative(k))
-            .map(|(dx, dy)| Add(dx, dy))
-    }
-}
-
-/// When `TYPE='s'`, it is a scalar implementation. When it is 'm', it is a matrix implementation.
 #[derive(Clone)]
-pub struct Mul<Lhs, Rhs, const TYPE: char = 's'>(pub Lhs, pub Rhs);
+pub struct Mul<Lhs, Rhs>(pub Lhs, pub Rhs);
 
 // h(x) = w * x
 // y = f(h(x))
@@ -61,34 +35,14 @@ pub struct Mul<Lhs, Rhs, const TYPE: char = 's'>(pub Lhs, pub Rhs);
 //
 // dy/dw = f'(h(x)) * x^T
 // dy/dx = w^T * f'(h(x))
-impl<
-        'a,
-        S1: nalgebra::Storage<f32, nalgebra::Const<K>, nalgebra::Const<L>>,
-        S2: nalgebra::Storage<f32, nalgebra::Const<L>, nalgebra::Const<M>>,
-        const K: usize,
-        const L: usize,
-        const M: usize,
-        Lhs: Differentiable<'a, T = Matrix<f32, Const<K>, Const<L>, S1>>,
-        Rhs: Differentiable<'a, T = Matrix<f32, Const<L>, Const<M>, S2>>,
-    > Differentiable<'a> for Mul<Lhs, Rhs, 'm'>
+
+impl<'a, L, R, LNode: Differentiable<'a, T = L> + 'a, RNode: Differentiable<'a, T = R> + 'a>
+    Differentiable<'a> for Mul<LNode, RNode>
+where
+    L: std::ops::Mul<R>,
 {
-    type Δ = Add<Lhs::Δ, Rhs::Δ>;
-    type T = Matrix<f32, Const<K>, Const<M>, ArrayStorage<f32, K, M>>;
-
-    fn eval(&self) -> Self::T {
-        self.0.eval() * self.1.eval()
-    }
-
-    fn derivative<const LEN: usize>(&'a self, k: &[&str; LEN]) -> [Self::Δ; LEN] {
-        todo!()
-    }
-}
-
-impl<'a, Lhs: Differentiable<'a, T = f32> + 'a, Rhs: Differentiable<'a, T = f32> + 'a>
-    Differentiable<'a> for Mul<Lhs, Rhs>
-{
-    type T = f32;
-    type Δ = Add<Mul<&'a Lhs, Rhs::Δ>, Mul<&'a Rhs, Lhs::Δ>>;
+    type Δ = Add<Mul<&'a LNode, RNode::Δ>, Mul<&'a RNode, LNode::Δ>>;
+    type T = <L as std::ops::Mul<R>>::Output;
 
     fn eval(&self) -> Self::T {
         self.0.eval() * self.1.eval()
@@ -112,26 +66,27 @@ macro_rules! impl_debug {
     };
 }
 
-macro_rules! impl_self_and_ref {
-    (impl<'a, $($t:tt$(:$t2:path)?),*> $op:ty => for $self:ty => $($body:tt)*) => {
-        impl<'a, $($t$(:$t2)?),*> $op for $self $($body)*
-        impl<'a, $($t$(:$t2)?),*> $op for &'a $self $($body)*
-    };
-}
-
 macro_rules! impl_f32_op {
     ($($Op:ident:$op: ident)*) => {
-        $(impl_self_and_ref! {
-            impl<'a, L: Differentiable<'a, T = f32>, R: Differentiable<'a, T = f32>> std::ops::$Op<R>
-            => for Node<'a, L>
-            => where L:'a + Clone, R: 'a, L::Δ: Differentiable<'a, T=f32>,R::Δ: Differentiable<'a, T=f32>{
-                type Output = Node<'a, $Op<Node<'a, L>, R>>;
+        $(
+            impl<L, R> std::ops::$Op<R> for Node<L>
+            {
+                type Output = Node<$Op<Node<L>, R>>;
 
                 fn $op(self, rhs: R) -> Self::Output {
-                    Node($Op(self.clone(), rhs),PhantomData)
+                    Node($Op(self, rhs))
                 }
             }
-        })*
+
+            impl<'a, L, R> std::ops::$Op<R> for &'a Node<L>
+            {
+                type Output = Node<$Op<&'a Node<L>, R>>;
+
+                fn $op(self, rhs: R) -> Self::Output {
+                    Node($Op(self, rhs))
+                }
+            }
+        )*
     };
 }
 

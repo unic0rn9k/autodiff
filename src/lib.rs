@@ -1,24 +1,26 @@
 #![feature(test, array_zip)]
 
-use std::{fmt::Debug, marker::PhantomData};
+use std::fmt::Debug;
 mod symbol;
 
-mod scalar;
+pub mod prelude;
 #[cfg(test)]
 mod test;
-pub use symbol::{symbol, AnonymousSymbol, Symbol};
+mod value;
+pub use symbol::{symbol, Symbol};
+use value::Scalar;
 pub mod ops;
 
 #[derive(Clone)]
-pub struct Node<'a, N: Differentiable<'a>>(N, PhantomData<&'a ()>);
+pub struct Node<N>(pub N);
 
-impl<'a, N: Debug + Differentiable<'a>> Debug for Node<'a, N> {
+impl<N: Debug> Debug for Node<N> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("@").field(&self.0).finish()
     }
 }
 
-impl<'a, N: Differentiable<'a>> Differentiable<'a> for Node<'a, N> {
+impl<'a, N: Differentiable<'a>> Differentiable<'a> for Node<N> {
     type Δ = N::Δ;
     type T = N::T;
 
@@ -31,9 +33,9 @@ impl<'a, N: Differentiable<'a>> Differentiable<'a> for Node<'a, N> {
     }
 }
 
-impl<'a, N: Differentiable<'a>> Node<'a, N> {
+impl<'a, N: Differentiable<'a>> Node<N> {
     fn new(node: N) -> Self {
-        Self(node, PhantomData)
+        Self(node)
     }
 }
 
@@ -43,14 +45,10 @@ pub trait Differentiable<'a> {
 
     fn eval(&self) -> Self::T;
     fn derivative<const LEN: usize>(&'a self, k: &[&str; LEN]) -> [Self::Δ; LEN];
-    //fn id(self: &Arc<Self>) -> NodeId {
-    //    NodeId(Arc::as_ptr(self) as *const ())
-    //}
-    fn symbol(self, symbol: &'static str) -> Node<'a, Symbol<'a, Self>>
+
+    fn symbol(self, symbol: &'static str) -> Node<Symbol<Self>>
     where
-        Self: Sized,
-        Self: Differentiable<'a, T = f32>,
-        Self::Δ: Differentiable<'a, T = f32>,
+        Self: Scalar,
     {
         Node::new(Symbol::new(self, symbol))
     }
@@ -69,19 +67,6 @@ impl<'a, N: Differentiable<'a>> Differentiable<'a> for &N {
     }
 }
 
-impl<'a> Differentiable<'a> for f32 {
-    type Δ = f32;
-    type T = f32;
-
-    fn eval(&self) -> Self::T {
-        *self
-    }
-
-    fn derivative<const LEN: usize>(&'a self, _: &[&str; LEN]) -> [Self::Δ; LEN] {
-        [0.; LEN]
-    }
-}
-
 #[test]
 fn basic() {
     let x = 2f32.symbol("x");
@@ -94,7 +79,7 @@ fn basic() {
     println!("dx = {dx:?}");
     println!("dy = {dy:?}");
 
-    assert_eq!(f.eval(), 10.);
+    assert_eq!(*f.eval(), 10.);
     assert_eq!(dx.eval(), 7.);
     assert_eq!(dy.eval(), 2.);
 

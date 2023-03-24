@@ -1,67 +1,42 @@
-use crate::{Differentiable, Node};
-use std::{fmt::Debug, marker::PhantomData};
+use crate::{prelude::*, Node};
+use std::fmt::Debug;
 
 #[derive(Clone)]
-pub struct Symbol<'a, N: Differentiable<'a>> {
+pub struct Symbol<N> {
     symbol: &'static str,
     node: N,
-    marker: PhantomData<&'a ()>,
 }
 
-impl<'a, N: Differentiable<'a> + Debug> Debug for Symbol<'a, N> {
+impl<'a, N: Differentiable<'a> + Debug> Debug for Symbol<N> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}={:?}", self.symbol, self.node)
     }
 }
 
-impl<'a, N: Differentiable<'a>> Symbol<'a, N> {
+impl<N> Symbol<N> {
     pub fn new(node: N, symbol: &'static str) -> Self {
-        Self {
-            symbol,
-            node,
-            marker: PhantomData,
-        }
+        Self { symbol, node }
     }
 }
 
-impl<'a, N: Differentiable<'a, T = f32>> Differentiable<'a> for Symbol<'a, N>
-where
-    N::Δ: Differentiable<'a, T = f32>,
-{
-    type Δ = f32;
-    type T = f32;
+impl<'a, N: Differentiable<'a>> Differentiable<'a> for Symbol<N> {
+    type Δ = Atom;
+    type T = N::T;
 
     fn eval(&self) -> Self::T {
         self.node.eval()
     }
 
     fn derivative<const LEN: usize>(&'a self, k: &[&str; LEN]) -> [Self::Δ; LEN] {
-        k.map(|k| {
-            if k == self.symbol {
-                1.
-            } else {
-                self.node.derivative(&[k])[0].eval()
-            }
-        })
+        k.map(|k| if k == self.symbol { One } else { Zero })
     }
 }
 
-#[derive(Clone)]
-pub struct AnonymousSymbol<T>(PhantomData<T>);
-
-impl<'a> Differentiable<'a> for AnonymousSymbol<f32> {
-    type Δ = f32;
-    type T = f32;
-
-    fn eval(&self) -> Self::T {
-        0.
-    }
-
-    fn derivative<const LEN: usize>(&'a self, _: &[&str; LEN]) -> [Self::Δ; LEN] {
-        [0.; LEN]
-    }
+impl From<Atom> for () {
+    fn from(_: Atom) {}
 }
+impl Scalar for () {}
 
-pub fn symbol<'a>(s: &'static str) -> Node<'a, Symbol<'a, AnonymousSymbol<f32>>> {
-    AnonymousSymbol(PhantomData).symbol(s)
+pub fn symbol(s: &'static str) -> Node<Symbol<()>> {
+    Node(Symbol::new((), s))
 }
