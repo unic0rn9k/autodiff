@@ -1,4 +1,4 @@
 10/3 - lavet forward mode ad for floats og basic graf
-- implementeret std::ops for nodes
+22/3 - implementeret std::ops for nodes
 22/3 - ryddet op i project structure, og fixet bug med derivativer blev prematurely evaluated.
 24/3 - generalisrede implementationer af traits og operationer

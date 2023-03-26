@@ -3,6 +3,7 @@
 use std::fmt::Debug;
 mod symbol;
 
+mod mat;
 pub mod prelude;
 #[cfg(test)]
 mod test;
@@ -48,7 +49,7 @@ pub trait Differentiable<'a> {
 
     fn symbol(self, symbol: &'static str) -> Node<Symbol<Self>>
     where
-        Self: Scalar,
+        Self: Sized,
     {
         Node::new(Symbol::new(self, symbol))
     }

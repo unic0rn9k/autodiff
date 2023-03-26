@@ -54,7 +54,7 @@ macro_rules! impl_scalar {
 
 impl_scalar!(u8 i8 u16 i16 u32 i32 u64 i64 u128 i128 f32 f64);
 
-pub struct NodeValue<T>(T);
+pub struct NodeValue<T>(pub T);
 
 impl<T> Deref for NodeValue<T> {
     type Target = T;
