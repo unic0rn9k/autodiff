@@ -3,12 +3,17 @@ use nalgebra::{ArrayStorage, Const, Dim, SMatrix};
 pub use nalgebra::{Matrix, Storage};
 use std::ops::*;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Atom {
-    One,
     Zero,
+    One,
 }
 pub use Atom::*;
+
+#[test]
+fn ord() {
+    assert!(One > Zero)
+}
 
 impl<'a> Differentiable<'a> for Atom {
     type Δ = Atom;
