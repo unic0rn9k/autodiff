@@ -1,4 +1,4 @@
-use crate::{prelude::*, Node};
+use crate::{ops::Mul, prelude::*, Node};
 use std::fmt::Debug;
 
 #[derive(Clone)]
@@ -19,16 +19,16 @@ impl<N> Symbol<N> {
     }
 }
 
-impl<'a, N: Differentiable<'a>> Differentiable<'a> for Symbol<N> {
-    type Δ = Atom;
+impl<'a, N: Differentiable<'a> + 'a> Differentiable<'a> for Symbol<N> {
+    type Δ<D> = Mul<Atom, D>;
     type T = N::T;
 
     fn eval(&self) -> Self::T {
         self.node.eval()
     }
 
-    fn derivative<const LEN: usize>(&'a self, k: &[&str; LEN]) -> [Self::Δ; LEN] {
-        k.map(|k| if k == self.symbol { One } else { Zero })
+    fn derivative<const LEN: usize, D>(&'a self, k: [(&str, D); LEN]) -> [Self::Δ<D>; LEN] {
+        k.map(|(k, d)| Mul(if k == self.symbol { One } else { Zero }, d))
     }
 }
 

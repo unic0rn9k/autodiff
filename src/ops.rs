@@ -10,16 +10,19 @@ impl<'a, L, R, LNode: Differentiable<'a, T = L>, RNode: Differentiable<'a, T = R
 where
     L: std::ops::Add<R>,
 {
-    type Δ = Add<LNode::Δ, RNode::Δ>;
+    type Δ<D> = Add<LNode::Δ<D>, RNode::Δ<D>>where Self: 'a;
     type T = <L as std::ops::Add<R>>::Output;
 
     fn eval(&self) -> Self::T {
         self.0.eval() + self.1.eval()
     }
 
-    fn derivative<const LEN: usize>(&'a self, k: &[&str; LEN]) -> [Self::Δ; LEN] {
+    fn derivative<'d, const LEN: usize, D: Clone>(
+        &'a self,
+        k: [(&str, D); LEN],
+    ) -> [Self::Δ<D>; LEN] {
         self.0
-            .derivative(k)
+            .derivative(k.clone())
             .zip(self.1.derivative(k))
             .map(|(dx, dy)| Add(dx, dy))
     }
@@ -76,21 +79,20 @@ impl<'a, L, R, LNode: Differentiable<'a, T = L> + 'a, RNode: Differentiable<'a, 
 where
     L: std::ops::Mul<R>,
 {
-    type Δ = Transpose<Add<Mul<&'a LNode, LNode::Δ>, Mul<RNode::Δ, &'a RNode>>>;
-    //type Δ = Transpose<Add<Mul<LNode::Δ, &'a RNode>, Mul<&'a LNode, RNode::Δ>>>;
-    //type Δ = Add<Mul<&'a LNode, Transpose<RNode::Δ>>, Mul<&'a RNode, Transpose<LNode::Δ>>>;
+    type Δ<D> = Add<LNode::Δ<Mul<D, Transpose<&'a RNode>>>, RNode::Δ<Mul<Transpose<&'a LNode>, D>>>;
     type T = <L as std::ops::Mul<R>>::Output;
 
     fn eval(&self) -> Self::T {
         self.0.eval() * self.1.eval()
     }
 
-    fn derivative<const LEN: usize>(&'a self, k: &[&str; LEN]) -> [Self::Δ; LEN] {
-        let dx = self.0.derivative(k);
-        let dy = self.1.derivative(k);
+    fn derivative<const LEN: usize, D: Clone>(&'a self, k: [(&str, D); LEN]) -> [Self::Δ<D>; LEN] {
         let Mul(x, y) = self;
-        dx.zip(dy)
-            .map(|(dx, dy)| Transpose(Add(Mul(x, dx), Mul(dy, y))))
+        let dx = self
+            .0
+            .derivative(k.clone().map(|(k, d)| (k, Mul(d, Transpose(y)))));
+        let dy = self.1.derivative(k.map(|(k, d)| (k, Mul(Transpose(x), d))));
+        dx.zip(dy).map(|(dx, dy)| Add(dx, dy))
     }
 }
 
@@ -123,14 +125,17 @@ where
 pub struct Transpose<N>(pub N);
 
 impl<'a, T: TransposeAble, N: Differentiable<'a, T = T>> Differentiable<'a> for Transpose<N> {
-    type Δ = Transpose<N::Δ>;
+    type Δ<D> = Transpose<N::Δ<D>>where Self: 'a;
     type T = T;
 
     fn eval(&self) -> Self::T {
         self.0.eval().transpose_()
     }
 
-    fn derivative<const LEN: usize>(&'a self, k: &[&str; LEN]) -> [Self::Δ; LEN] {
+    fn derivative<'d, const LEN: usize, D: Clone>(
+        &'a self,
+        k: [(&str, D); LEN],
+    ) -> [Self::Δ<D>; LEN] {
         self.0.derivative(k).map(Transpose)
     }
 }

@@ -16,14 +16,14 @@ fn ord() {
 }
 
 impl<'a> Differentiable<'a> for Atom {
-    type Δ = Atom;
+    type Δ<T> = Atom;
     type T = Atom;
 
     fn eval(&self) -> Self::T {
         *self
     }
 
-    fn derivative<const LEN: usize>(&'a self, _: &[&str; LEN]) -> [Self::Δ; LEN] {
+    fn derivative<const LEN: usize, D>(&'a self, _: [(&str, D); LEN]) -> [Self::Δ<D>; LEN] {
         [Zero; LEN]
     }
 }
@@ -43,14 +43,14 @@ macro_rules! impl_scalar {
         impl Scalar for $t{}
 
         impl<'a> Differentiable<'a> for $t{
-                type Δ = Atom;
+                type Δ<T> = Atom;
                 type T = NodeValue<$t>;
 
                 fn eval(&self) -> Self::T {
                     NodeValue(*self)
                 }
 
-                fn derivative<const LEN: usize>(&'a self, _: &[&str; LEN]) -> [Self::Δ; LEN] {
+                fn derivative<const LEN: usize, D>(&'a self, _: [(&str, D); LEN]) -> [Self::Δ< D>; LEN] {
                     [Zero; LEN]
                 }
         }
@@ -95,7 +95,15 @@ macro_rules! impl_node_val_ops {
             }
         }
 
-
+        impl $Op<Atom> for Atom{
+            type Output = Atom;
+            fn $op(self, rhs: Atom) -> Atom{
+                match (self, rhs){
+                    (One, One) => One,
+                    _ => Zero
+                }
+            }
+        }
 
     )*};
 }

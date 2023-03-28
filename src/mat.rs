@@ -73,14 +73,14 @@ where
 }
 
 impl<'a, T: Copy + PartialEq + std::fmt::Debug + 'static> Differentiable<'a> for MatrixNode<T> {
-    type Δ = Atom;
+    type Δ<D> = Atom;
     type T = MatrixNode<T>;
 
     fn eval(&self) -> Self::T {
         self.clone()
     }
 
-    fn derivative<const LEN: usize>(&'a self, _: &[&str; LEN]) -> [Self::Δ; LEN] {
+    fn derivative<const LEN: usize, D>(&'a self, _: [(&str, D); LEN]) -> [Self::Δ<D>; LEN] {
         [Zero; LEN]
     }
 }
@@ -183,7 +183,9 @@ fn gradient_decent() {
 
     let l1 = &w1 * &x + &b1;
     let l2 = &w2 * &l1 + &b2;
-    let [dw1, dw2] = l2.derivative(&["w1", "w2"]);
+    let [dw1, dw2] = l2.derivative([("w1", One), ("w2", One)]);
+
+    l2.eval();
 
     println!("dw1 = {dw1:?}");
     println!();

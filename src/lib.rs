@@ -10,7 +10,6 @@ mod test;
 mod value;
 use ops::Transpose;
 pub use symbol::{symbol, Symbol};
-use value::Scalar;
 pub mod ops;
 
 #[derive(Clone)]
@@ -23,14 +22,17 @@ impl<N: Debug> Debug for Node<N> {
 }
 
 impl<'a, N: Differentiable<'a>> Differentiable<'a> for Node<N> {
-    type Δ = N::Δ;
+    type Δ<D> = N::Δ<D> where Self: 'a;
     type T = N::T;
 
     fn eval(&self) -> Self::T {
         self.0.eval()
     }
 
-    fn derivative<const LEN: usize>(&'a self, k: &[&str; LEN]) -> [Self::Δ; LEN] {
+    fn derivative<'d, const LEN: usize, D: Clone>(
+        &'a self,
+        k: [(&str, D); LEN],
+    ) -> [Self::Δ<D>; LEN] {
         self.0.derivative(k)
     }
 }
@@ -42,15 +44,17 @@ impl<'a, N: Differentiable<'a>> Node<N> {
 }
 
 pub trait Differentiable<'a> {
-    type Δ;
+    type Δ<T>
+    where
+        Self: 'a;
     type T;
 
     fn eval(&self) -> Self::T;
-    fn derivative<const LEN: usize>(&'a self, k: &[&str; LEN]) -> [Self::Δ; LEN];
+    fn derivative<const LEN: usize, D: Clone>(&'a self, k: [(&str, D); LEN]) -> [Self::Δ<D>; LEN];
 
     fn symbol(self, symbol: &'static str) -> Node<Symbol<Self>>
     where
-        Self: Sized,
+        Self: Sized + 'a,
     {
         Node::new(Symbol::new(self, symbol))
     }
@@ -64,25 +68,29 @@ pub trait Differentiable<'a> {
 }
 
 impl<'a, N: Differentiable<'a>> Differentiable<'a> for &N {
-    type Δ = N::Δ;
+    type Δ<D> = N::Δ<D> where Self: 'a;
     type T = N::T;
 
     fn eval(&self) -> Self::T {
         (*self).eval()
     }
 
-    fn derivative<const LEN: usize>(&'a self, k: &[&str; LEN]) -> [Self::Δ; LEN] {
+    fn derivative<'d, const LEN: usize, D: Clone>(
+        &'a self,
+        k: [(&str, D); LEN],
+    ) -> [Self::Δ<D>; LEN] {
         (*self).derivative(k)
     }
 }
 
 #[test]
 fn basic() {
+    use crate::prelude::*;
     let x = 2f32.symbol("x");
     let y = 3f32.symbol("y");
     let f = &x * &y + &x * &x;
 
-    let [dx, dy] = f.derivative(&["x", "y"]);
+    let [dx, dy] = f.derivative([("x", One), ("y", One)]);
 
     println!("f  = {f:?}");
     println!("dx = {dx:?}");
