@@ -198,8 +198,6 @@ fn gradient_decent() {
     println!("dw2 = {dw2:?}");
     println!();
 
-    dw1.eval();
-    dw2.eval();
-    //assert_eq!(dw2.eval(), (&l1).transpose().eval());
-    //assert_eq!(dw1.eval(), (Node(Transpose(w2)) * x).transpose().eval());
+    assert_eq!(dw2.eval().shape(), w2.eval().shape());
+    assert_eq!(dw1.eval().shape(), w1.eval().shape());
 }
