@@ -30,6 +30,10 @@ impl<'a, N: Differentiable<'a> + 'a> Differentiable<'a> for Symbol<N> {
     fn derivative<const LEN: usize, D>(&'a self, k: [(&str, D); LEN]) -> [Self::Δ<D>; LEN] {
         k.map(|(k, d)| Mul(if k == self.symbol { One } else { Zero }, d))
     }
+
+    fn is_zero(&self) -> bool {
+        false
+    }
 }
 
 impl From<Atom> for () {

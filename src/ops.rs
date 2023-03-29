@@ -26,6 +26,10 @@ where
             .zip(self.1.derivative(k))
             .map(|(dx, dy)| Add(dx, dy))
     }
+
+    fn is_zero(&self) -> bool {
+        self.0.is_zero() && self.1.is_zero()
+    }
 }
 
 #[derive(Clone)]
@@ -74,6 +78,13 @@ pub struct Mul<Lhs, Rhs>(pub Lhs, pub Rhs);
 // ChatGPT says:
 // (dC/dx) = (dA/dx)B + A(dB/dx)
 
+// w2 * (w1 * x)
+//
+// ∇w2     = (w1 * x)T
+// ∇(w1*x) = w2T
+// ∇w1     = ∇(w1*x) * XT
+// ∇x      = w1T * ∇w2
+
 impl<'a, L, R, LNode: Differentiable<'a, T = L> + 'a, RNode: Differentiable<'a, T = R> + 'a>
     Differentiable<'a> for Mul<LNode, RNode>
 where
@@ -94,7 +105,15 @@ where
         let dy = self.1.derivative(k.map(|(k, d)| (k, Mul(Transpose(x), d))));
         dx.zip(dy).map(|(dx, dy)| Add(dx, dy))
     }
+
+    fn is_zero(&self) -> bool {
+        self.0.is_zero() || self.1.is_zero()
+    }
 }
+
+// w2 <- x*1
+// w2 -> x
+// + l1
 
 trait TransposeAble {
     fn transpose_(self) -> Self;
@@ -138,13 +157,19 @@ impl<'a, T: TransposeAble, N: Differentiable<'a, T = T>> Differentiable<'a> for 
     ) -> [Self::Δ<D>; LEN] {
         self.0.derivative(k).map(Transpose)
     }
+
+    fn is_zero(&self) -> bool {
+        self.0.is_zero()
+    }
 }
 
 macro_rules! impl_debug {
     ($($op: tt $name: ident),*) => {
-        $(impl<Lhs: std::fmt::Debug, Rhs: std::fmt::Debug> std::fmt::Debug for $name<Lhs, Rhs> {
+        $(impl<'a, Lhs: std::fmt::Debug, Rhs: std::fmt::Debug> std::fmt::Debug for $name<Lhs, Rhs> where Self: Differentiable<'a>{
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "({:?} {} {:?})", self.0, stringify!($op), self.1)
+                if self.is_zero(){write!(f,"Zero")}else{
+                    write!(f, "({:?} {} {:?})", self.0, stringify!($op), self.1)
+                }
             }
         })*
     };

@@ -26,6 +26,13 @@ impl<'a> Differentiable<'a> for Atom {
     fn derivative<const LEN: usize, D>(&'a self, _: [(&str, D); LEN]) -> [Self::Δ<D>; LEN] {
         [Zero; LEN]
     }
+
+    fn is_zero(&self) -> bool {
+        match self {
+            Zero => true,
+            One => false,
+        }
+    }
 }
 
 pub trait Scalar: From<Atom> {}
@@ -52,6 +59,10 @@ macro_rules! impl_scalar {
 
                 fn derivative<const LEN: usize, D>(&'a self, _: [(&str, D); LEN]) -> [Self::Δ< D>; LEN] {
                     [Zero; LEN]
+                }
+
+                fn is_zero(&self) -> bool{
+                    false
                 }
         }
     )*};

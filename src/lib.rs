@@ -35,6 +35,10 @@ impl<'a, N: Differentiable<'a>> Differentiable<'a> for Node<N> {
     ) -> [Self::Δ<D>; LEN] {
         self.0.derivative(k)
     }
+
+    fn is_zero(&self) -> bool {
+        self.0.is_zero()
+    }
 }
 
 impl<'a, N: Differentiable<'a>> Node<N> {
@@ -65,6 +69,8 @@ pub trait Differentiable<'a> {
     {
         Transpose(self)
     }
+
+    fn is_zero(&self) -> bool;
 }
 
 impl<'a, N: Differentiable<'a>> Differentiable<'a> for &N {
@@ -81,6 +87,10 @@ impl<'a, N: Differentiable<'a>> Differentiable<'a> for &N {
     ) -> [Self::Δ<D>; LEN] {
         (*self).derivative(k)
     }
+
+    fn is_zero(&self) -> bool {
+        (*self).is_zero()
+    }
 }
 
 #[test]
@@ -93,8 +103,8 @@ fn basic() {
     let [dx, dy] = f.derivative([("x", One), ("y", One)]);
 
     println!("f  = {f:?}");
-    println!("dx = {dx:?}");
-    println!("dy = {dy:?}");
+    //println!("dx = {dx:?}");
+    //println!("dy = {dy:?}");
 
     assert_eq!(*f.eval(), 10.);
     //assert_eq!(Node(dx).eval(), 7.);
