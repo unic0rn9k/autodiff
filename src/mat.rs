@@ -1,27 +1,47 @@
-use crate::ops::Transpose;
 use crate::value::Atom;
-use crate::{prelude::*, value, Node};
-use nalgebra::{DMatrix, Dyn, OMatrix};
+use crate::{prelude::*, value};
+pub use nalgebra;
+use nalgebra::allocator::Allocator;
+use nalgebra::{DMatrix, DefaultAllocator, Dyn, Matrix, OMatrix};
 use std::fmt::Debug;
 use std::ops::*;
 
 #[derive(Clone)]
 pub struct MatrixNode<T>(pub Option<OMatrix<T, Dyn, Dyn>>)
 where
-    nalgebra::DefaultAllocator: nalgebra::allocator::Allocator<T, nalgebra::Dyn, nalgebra::Dyn>;
+    DefaultAllocator: Allocator<T, Dyn, Dyn>;
 
 impl<T> MatrixNode<T>
 where
-    nalgebra::DefaultAllocator: nalgebra::allocator::Allocator<T, nalgebra::Dyn, nalgebra::Dyn>,
+    DefaultAllocator: Allocator<T, Dyn, Dyn>,
 {
     pub fn shape(&self) -> Option<(usize, usize)> {
         self.0.as_ref().map(|m| (m.nrows(), m.ncols()))
+    }
+
+    pub fn argmax(&self) -> usize
+    where
+        T: std::cmp::PartialOrd,
+    {
+        if let Some(m) = &self.0 {
+            let mut max = &m[0];
+            let mut max_index = 0;
+            for (i, v) in m.iter().enumerate() {
+                if v > max {
+                    max = v;
+                    max_index = i;
+                }
+            }
+            max_index
+        } else {
+            0
+        }
     }
 }
 
 impl<T> Debug for MatrixNode<T>
 where
-    nalgebra::DefaultAllocator: nalgebra::allocator::Allocator<T, nalgebra::Dyn, nalgebra::Dyn>,
+    DefaultAllocator: Allocator<T, Dyn, Dyn>,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some((r, c)) = self.shape() {
@@ -75,12 +95,13 @@ where
 impl<'a, T: Copy + PartialEq + std::fmt::Debug + 'static> Differentiable<'a> for MatrixNode<T> {
     type Δ<D> = Atom;
     type T = MatrixNode<T>;
+    type Unit = T;
 
     fn eval(&self) -> Self::T {
         self.clone()
     }
 
-    fn derivative<const LEN: usize, D>(&'a self, _: [(&str, D); LEN]) -> [Self::Δ<D>; LEN] {
+    fn derivative<const LEN: usize, D>(&'a self, _: [&str; LEN], _: D) -> [Self::Δ<D>; LEN] {
         [Zero; LEN]
     }
 
@@ -92,7 +113,7 @@ impl<'a, T: Copy + PartialEq + std::fmt::Debug + 'static> Differentiable<'a> for
 impl<T> Add<MatrixNode<T>> for MatrixNode<T>
 where
     OMatrix<T, Dyn, Dyn>: Add<OMatrix<T, Dyn, Dyn>, Output = OMatrix<T, Dyn, Dyn>>,
-    nalgebra::DefaultAllocator: nalgebra::allocator::Allocator<T, nalgebra::Dyn, nalgebra::Dyn>,
+    DefaultAllocator: Allocator<T, Dyn, Dyn>,
 {
     type Output = MatrixNode<T>;
 
@@ -109,7 +130,7 @@ where
 impl<T> Mul<MatrixNode<T>> for MatrixNode<T>
 where
     OMatrix<T, Dyn, Dyn>: Mul<OMatrix<T, Dyn, Dyn>, Output = OMatrix<T, Dyn, Dyn>>,
-    nalgebra::DefaultAllocator: nalgebra::allocator::Allocator<T, nalgebra::Dyn, nalgebra::Dyn>,
+    DefaultAllocator: Allocator<T, Dyn, Dyn>,
 {
     type Output = MatrixNode<T>;
 
@@ -129,7 +150,7 @@ where
 
 impl<T: nalgebra::Scalar + crate::value::Scalar> Mul<Atom> for MatrixNode<T>
 where
-    nalgebra::DefaultAllocator: nalgebra::allocator::Allocator<T, nalgebra::Dyn, nalgebra::Dyn>,
+    DefaultAllocator: Allocator<T, Dyn, Dyn>,
 {
     type Output = MatrixNode<T>;
 
@@ -143,7 +164,7 @@ where
 
 impl<T: nalgebra::Scalar + crate::value::Scalar> Mul<MatrixNode<T>> for Atom
 where
-    nalgebra::DefaultAllocator: nalgebra::allocator::Allocator<T, nalgebra::Dyn, nalgebra::Dyn>,
+    DefaultAllocator: Allocator<T, Dyn, Dyn>,
 {
     type Output = MatrixNode<T>;
 
@@ -170,13 +191,14 @@ impl<T: nalgebra::Scalar + crate::value::Scalar + Add<T, Output = T>> Add<Matrix
 
 pub fn mat<T>(m: OMatrix<T, Dyn, Dyn>) -> MatrixNode<T>
 where
-    nalgebra::DefaultAllocator: nalgebra::allocator::Allocator<T, nalgebra::Dyn, nalgebra::Dyn>,
+    DefaultAllocator: Allocator<T, Dyn, Dyn>,
 {
     MatrixNode(Some(m))
 }
 
 #[test]
 fn gradient_decent() {
+    use nalgebra::DMatrix;
     let x = mat(DMatrix::<f32>::new_random(3, 1)).symbol("input");
 
     let w1 = mat(DMatrix::<f32>::new_random(2, 3)).symbol("w1");
@@ -185,11 +207,11 @@ fn gradient_decent() {
     let w2 = mat(DMatrix::<f32>::new_random(4, 2)).symbol("w2");
     let b2 = mat(DMatrix::<f32>::new_random(4, 1)).symbol("b2");
 
-    let dl2 = mat(DMatrix::<f32>::repeat(4, 1, 1.));
+    let dl2 = mat(DMatrix::<f32>::repeat(4, 1, 1.)).symbol("∇");
 
-    let l1 = &w1 * &x + &b1;
-    let l2 = &w2 * &l1 + &b2;
-    let [dw1, dw2] = l2.derivative([("w1", &dl2), ("w2", &dl2)]);
+    let l1 = &w1 * x + &b1;
+    let l2 = &w2 * l1 + &b2;
+    let [dw1, dw2] = l2.derivative(["w1", "w2"], dl2);
 
     l2.eval();
 
@@ -201,3 +223,5 @@ fn gradient_decent() {
     assert_eq!(dw2.eval().shape(), w2.eval().shape());
     assert_eq!(dw1.eval().shape(), w1.eval().shape());
 }
+
+// echo 'digraph { a -> b }' | dot -Tsvg > output.svg

@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+cudarc = "0.9.5"
 flame = "0.2.2"
 flamer = "0.4.0"
 nalgebra = { version = "0.32.2", features = ["rand"] }
+
+[workspace]
+members = ["examples/*"]

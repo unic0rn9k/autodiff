@@ -1,6 +1,5 @@
-use nalgebra::{ArrayStorage, Const, Matrix};
-
-use crate::{mat::MatrixNode, prelude::*, Node};
+use crate::{mat::MatrixNode, prelude::*, value, Node};
+use nalgebra::{allocator::Allocator, DefaultAllocator, Dyn};
 
 #[derive(Clone)]
 pub struct Add<Lhs, Rhs>(pub Lhs, pub Rhs);
@@ -12,6 +11,7 @@ where
 {
     type Δ<D> = Add<LNode::Δ<D>, RNode::Δ<D>>where Self: 'a;
     type T = <L as std::ops::Add<R>>::Output;
+    type Unit = LNode::Unit;
 
     fn eval(&self) -> Self::T {
         self.0.eval() + self.1.eval()
@@ -19,11 +19,11 @@ where
 
     fn derivative<'d, const LEN: usize, D: Clone>(
         &'a self,
-        k: [(&str, D); LEN],
+        k: [&str; LEN],d:D
     ) -> [Self::Δ<D>; LEN] {
         self.0
-            .derivative(k.clone())
-            .zip(self.1.derivative(k))
+            .derivative(k.clone(), d.clone())
+            .zip(self.1.derivative(k, d))
             .map(|(dx, dy)| Add(dx, dy))
     }
 
@@ -32,58 +32,36 @@ where
     }
 }
 
+impl<'a, L, R, LNode: Differentiable<'a, T = L>, RNode: Differentiable<'a, T = R>>
+    Differentiable<'a> for Sub<LNode, RNode>
+where
+    L: std::ops::Sub<R>,
+{
+    type Δ<D> = Sub<LNode::Δ<D>, RNode::Δ<D>> where Self: 'a;
+    type T = <L as std::ops::Sub<R>>::Output;
+    type Unit = LNode::Unit;
+
+    fn eval(&self) -> Self::T {
+        self.0.eval() - self.1.eval()
+    }
+
+    fn derivative<const LEN: usize, D: Clone>(&'a self, k: [&str; LEN], d:D) -> [Self::Δ<D>; LEN] {
+        self.0
+            .derivative(k.clone(), d.clone())
+            .zip(self.1.derivative(k,d))
+            .map(|(dx, dy)| Sub(dx, dy))
+    }
+
+    fn is_zero(&self) -> bool {
+        false
+    }
+}
+
+#[derive(Clone)]
+pub struct Sub<Lhs, Rhs>(pub Lhs, pub Rhs);
+
 #[derive(Clone)]
 pub struct Mul<Lhs, Rhs>(pub Lhs, pub Rhs);
-
-// h(x) = w * x
-// y = f(h(x))
-//
-// dh/dw = w * x' + w' * x
-//
-// dy/dx = w^T * f'(h(x))
-// dy/dw = f'(h(x)) * x^T
-//
-// w2 * l1
-// l' = x^T
-// r' = 0
-//
-// l * l' + r' * r
-//
-// L^T * R' + L' * R^T
-//
-// w2 * (w1 * x)
-//
-// rhs  = (w1 * x)
-// rhs' = x
-//
-// lhs  = w2
-// lhs' = 0
-//
-// lhs_inner    + rhs * lhs'T
-// (rhs'T + lhs') * lhs +
-//
-// dx = w1^T * w2
-//
-// rhs' = w1
-// lhs = w2
-
-// x = [i, m]
-// y = [j, n]^T
-//
-// a(i) = i * j
-// b(m) = m * n
-//
-// x * y = [a(i), b(m)]
-//
-// ChatGPT says:
-// (dC/dx) = (dA/dx)B + A(dB/dx)
-
-// w2 * (w1 * x)
-//
-// ∇w2     = (w1 * x)T
-// ∇(w1*x) = w2T
-// ∇w1     = ∇(w1*x) * XT
-// ∇x      = w1T * ∇w2
 
 impl<'a, L, R, LNode: Differentiable<'a, T = L> + 'a, RNode: Differentiable<'a, T = R> + 'a>
     Differentiable<'a> for Mul<LNode, RNode>
@@ -92,17 +70,18 @@ where
 {
     type Δ<D> = Add<LNode::Δ<Mul<D, Transpose<&'a RNode>>>, RNode::Δ<Mul<Transpose<&'a LNode>, D>>>;
     type T = <L as std::ops::Mul<R>>::Output;
+    type Unit = LNode::Unit;
 
     fn eval(&self) -> Self::T {
         self.0.eval() * self.1.eval()
     }
 
-    fn derivative<const LEN: usize, D: Clone>(&'a self, k: [(&str, D); LEN]) -> [Self::Δ<D>; LEN] {
+    fn derivative<const LEN: usize, D: Clone>(&'a self, k: [&str; LEN], d:D) -> [Self::Δ<D>; LEN] {
         let Mul(x, y) = self;
         let dx = self
             .0
-            .derivative(k.clone().map(|(k, d)| (k, Mul(d, Transpose(y)))));
-        let dy = self.1.derivative(k.map(|(k, d)| (k, Mul(Transpose(x), d))));
+            .derivative(k.clone(), Mul(d.clone(), Transpose(y)));
+        let dy = self.1.derivative(k, Mul(Transpose(x), d));
         dx.zip(dy).map(|(dx, dy)| Add(dx, dy))
     }
 
@@ -110,10 +89,6 @@ where
         self.0.is_zero() || self.1.is_zero()
     }
 }
-
-// w2 <- x*1
-// w2 -> x
-// + l1
 
 trait TransposeAble {
     fn transpose_(self) -> Self;
@@ -133,7 +108,7 @@ impl TransposeAble for Atom {
 
 impl<T: Clone + PartialEq + std::fmt::Debug + 'static> TransposeAble for MatrixNode<T>
 where
-    nalgebra::DefaultAllocator: nalgebra::allocator::Allocator<T, nalgebra::Dyn, nalgebra::Dyn>,
+    DefaultAllocator: Allocator<T, Dyn, Dyn>,
 {
     fn transpose_(self) -> Self {
         Self(self.0.map(|m| m.transpose()))
@@ -146,6 +121,7 @@ pub struct Transpose<N>(pub N);
 impl<'a, T: TransposeAble, N: Differentiable<'a, T = T>> Differentiable<'a> for Transpose<N> {
     type Δ<D> = Transpose<N::Δ<D>>where Self: 'a;
     type T = T;
+    type Unit = N::Unit;
 
     fn eval(&self) -> Self::T {
         self.0.eval().transpose_()
@@ -153,9 +129,70 @@ impl<'a, T: TransposeAble, N: Differentiable<'a, T = T>> Differentiable<'a> for 
 
     fn derivative<'d, const LEN: usize, D: Clone>(
         &'a self,
-        k: [(&str, D); LEN],
+        k: [&str; LEN],
+        d:D
     ) -> [Self::Δ<D>; LEN] {
-        self.0.derivative(k).map(Transpose)
+        todo!()
+    }
+
+    fn is_zero(&self) -> bool {
+        self.0.is_zero()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Softmax<N>(pub N);
+
+impl<'a, T: value::Scalar, N: Differentiable<'a, T = MatrixNode<T>> + 'a> Differentiable<'a>
+    for Softmax<N>
+where
+    DefaultAllocator: Allocator<T, Dyn, Dyn>,
+{
+    type Δ<D> = N::Δ<Mul<MatrixNode<T>, D>>;
+    type T = MatrixNode<T>;
+    type Unit = N::Unit;
+
+    fn eval(&self) -> Self::T {
+        if let Some(m) = &self.0.eval().0 {
+            let mut tmp = nalgebra::Matrix::<
+                T,
+                Dyn,
+                Dyn,
+                <DefaultAllocator as Allocator<T, Dyn, Dyn>>::Buffer,
+            >::repeat(m.nrows(), m.ncols(), T::from(Zero));
+            for mut row in 0..m.nrows() {
+                let sum = m.row(row).iter().map(|x| x.exp()).sum::<T>();
+                tmp.row_mut(row).iter_mut().for_each(|x| *x = x.exp() / sum);
+            }
+            MatrixNode(Some(tmp))
+        } else {
+            MatrixNode(None)
+        }
+    }
+
+    fn derivative<'d, const LEN: usize, D: Clone>(
+        &'a self,
+        k: [&str; LEN],
+        d:D
+    ) -> [Self::Δ<D>; LEN] {
+        let delta = if let Some(m) = &self.0.eval().0 {
+            let mut tmp = nalgebra::Matrix::<
+                T,
+                Dyn,
+                Dyn,
+                <DefaultAllocator as Allocator<T, Dyn, Dyn>>::Buffer,
+            >::repeat(m.nrows(), m.ncols(), T::from(Zero));
+            for mut row in 0..m.nrows() {
+                let sum = m.row(row).iter().map(|x| x.exp()).sum::<T>();
+                tmp.row_mut(row).iter_mut().for_each(|x| {
+                    let sm = x.exp() / sum;
+                    *x = Mul(sm * (T::from(One) - sm), d.clone())
+            });
+            }
+            MatrixNode(Some(tmp))
+        } else {
+            MatrixNode(None)
+        }
     }
 
     fn is_zero(&self) -> bool {

@@ -1,6 +1,4 @@
 use crate::Differentiable;
-use nalgebra::{ArrayStorage, Const, Dim, SMatrix};
-pub use nalgebra::{Matrix, Storage};
 use std::ops::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -18,12 +16,13 @@ fn ord() {
 impl<'a> Differentiable<'a> for Atom {
     type Δ<T> = Atom;
     type T = Atom;
+    type Unit = Atom;
 
     fn eval(&self) -> Self::T {
         *self
     }
 
-    fn derivative<const LEN: usize, D>(&'a self, _: [(&str, D); LEN]) -> [Self::Δ<D>; LEN] {
+    fn derivative<const LEN: usize, D>(&'a self, _: [&str; LEN], _: D) -> [Self::Δ<D>; LEN] {
         [Zero; LEN]
     }
 
@@ -35,7 +34,20 @@ impl<'a> Differentiable<'a> for Atom {
     }
 }
 
-pub trait Scalar: From<Atom> {}
+pub trait Scalar:
+    From<Atom>
+    + Div<Self, Output = Self>
+    + Add<Self, Output = Self>
+    + Mul<Self, Output = Self>
+    + Sub<Self, Output = Self>
+    + Copy
+    + PartialEq
+    + std::fmt::Debug
+    + std::iter::Sum<Self>
+    + 'static
+{
+    fn exp(self) -> Self;
+}
 
 macro_rules! impl_scalar {
     ($($t: ty)*) => {$(
@@ -47,17 +59,22 @@ macro_rules! impl_scalar {
                 }
             }
         }
-        impl Scalar for $t{}
+        impl Scalar for $t{
+            fn exp(self) -> Self{
+                self.exp()
+            }
+        }
 
         impl<'a> Differentiable<'a> for $t{
                 type Δ<T> = Atom;
                 type T = NodeValue<$t>;
+                type Unit = $t;
 
                 fn eval(&self) -> Self::T {
                     NodeValue(*self)
                 }
 
-                fn derivative<const LEN: usize, D>(&'a self, _: [(&str, D); LEN]) -> [Self::Δ< D>; LEN] {
+                fn derivative<const LEN: usize, D>(&'a self, _: [&str; LEN], _:D) -> [Self::Δ< D>; LEN] {
                     [Zero; LEN]
                 }
 

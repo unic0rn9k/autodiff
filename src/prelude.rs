@@ -1,1 +1,1 @@
-pub use crate::{value::*, Differentiable};
+pub use crate::{mat::mat, value::*, Differentiable};

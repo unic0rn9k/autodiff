@@ -3,8 +3,8 @@ use std::fmt::Debug;
 
 #[derive(Clone)]
 pub struct Symbol<N> {
-    symbol: &'static str,
-    node: N,
+    pub symbol: &'static str,
+    pub node: N,
 }
 
 impl<'a, N: Differentiable<'a> + Debug> Debug for Symbol<N> {
@@ -22,13 +22,14 @@ impl<N> Symbol<N> {
 impl<'a, N: Differentiable<'a> + 'a> Differentiable<'a> for Symbol<N> {
     type Δ<D> = Mul<Atom, D>;
     type T = N::T;
+    type Unit = N::Unit;
 
     fn eval(&self) -> Self::T {
         self.node.eval()
     }
 
-    fn derivative<const LEN: usize, D>(&'a self, k: [(&str, D); LEN]) -> [Self::Δ<D>; LEN] {
-        k.map(|(k, d)| Mul(if k == self.symbol { One } else { Zero }, d))
+    fn derivative<const LEN: usize, D>(&'a self, k: [&str; LEN], d: D) -> [Self::Δ<D>; LEN] {
+        k.map(|k| Mul(if k == self.symbol { One } else { Zero }, d))
     }
 
     fn is_zero(&self) -> bool {
@@ -39,7 +40,6 @@ impl<'a, N: Differentiable<'a> + 'a> Differentiable<'a> for Symbol<N> {
 impl From<Atom> for () {
     fn from(_: Atom) {}
 }
-impl Scalar for () {}
 
 pub fn symbol(s: &'static str) -> Node<Symbol<()>> {
     Node(Symbol::new((), s))

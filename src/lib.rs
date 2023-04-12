@@ -3,7 +3,7 @@
 use std::fmt::Debug;
 mod symbol;
 
-mod mat;
+pub mod mat;
 pub mod prelude;
 #[cfg(test)]
 mod test;
@@ -12,49 +12,16 @@ use ops::Transpose;
 pub use symbol::{symbol, Symbol};
 pub mod ops;
 
-#[derive(Clone)]
-pub struct Node<N>(pub N);
-
-impl<N: Debug> Debug for Node<N> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("@").field(&self.0).finish()
-    }
-}
-
-impl<'a, N: Differentiable<'a>> Differentiable<'a> for Node<N> {
-    type Δ<D> = N::Δ<D> where Self: 'a;
-    type T = N::T;
-
-    fn eval(&self) -> Self::T {
-        self.0.eval()
-    }
-
-    fn derivative<'d, const LEN: usize, D: Clone>(
-        &'a self,
-        k: [(&str, D); LEN],
-    ) -> [Self::Δ<D>; LEN] {
-        self.0.derivative(k)
-    }
-
-    fn is_zero(&self) -> bool {
-        self.0.is_zero()
-    }
-}
-
-impl<'a, N: Differentiable<'a>> Node<N> {
-    fn new(node: N) -> Self {
-        Self(node)
-    }
-}
-
 pub trait Differentiable<'a> {
     type Δ<T>
     where
         Self: 'a;
     type T;
+    type Unit;
 
     fn eval(&self) -> Self::T;
-    fn derivative<const LEN: usize, D: Clone>(&'a self, k: [(&str, D); LEN]) -> [Self::Δ<D>; LEN];
+    fn derivative<const LEN: usize, D: Clone>(&'a self, k: [&str; LEN], d: D)
+        -> [Self::Δ<D>; LEN];
 
     fn symbol(self, symbol: &'static str) -> Node<Symbol<Self>>
     where
@@ -73,9 +40,47 @@ pub trait Differentiable<'a> {
     fn is_zero(&self) -> bool;
 }
 
+#[derive(Clone)]
+pub struct Node<N>(pub N);
+
+impl<N: Debug> Debug for Node<N> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("@").field(&self.0).finish()
+    }
+}
+
+impl<'a, N: Differentiable<'a>> Differentiable<'a> for Node<N> {
+    type Δ<D> = N::Δ<D> where Self: 'a;
+    type T = N::T;
+    type Unit = N::Unit;
+
+    fn eval(&self) -> Self::T {
+        self.0.eval()
+    }
+
+    fn derivative<'d, const LEN: usize, D: Clone>(
+        &'a self,
+        k: [&str; LEN],
+        d: D,
+    ) -> [Self::Δ<D>; LEN] {
+        self.0.derivative(k, d)
+    }
+
+    fn is_zero(&self) -> bool {
+        self.0.is_zero()
+    }
+}
+
+impl<'a, N: Differentiable<'a>> Node<N> {
+    fn new(node: N) -> Self {
+        Self(node)
+    }
+}
+
 impl<'a, N: Differentiable<'a>> Differentiable<'a> for &N {
     type Δ<D> = N::Δ<D> where Self: 'a;
     type T = N::T;
+    type Unit = N::Unit;
 
     fn eval(&self) -> Self::T {
         (*self).eval()
@@ -83,9 +88,10 @@ impl<'a, N: Differentiable<'a>> Differentiable<'a> for &N {
 
     fn derivative<'d, const LEN: usize, D: Clone>(
         &'a self,
-        k: [(&str, D); LEN],
+        k: [&str; LEN],
+        d: D,
     ) -> [Self::Δ<D>; LEN] {
-        (*self).derivative(k)
+        (*self).derivative(k, d)
     }
 
     fn is_zero(&self) -> bool {
@@ -100,11 +106,11 @@ fn basic() {
     let y = 3f32.symbol("y");
     let f = &x * &y + &x * &x;
 
-    let [dx, dy] = f.derivative([("x", One), ("y", One)]);
+    let [dx, dy] = f.derivative(["x", "y"], 1f32);
 
     println!("f  = {f:?}");
-    //println!("dx = {dx:?}");
-    //println!("dy = {dy:?}");
+    println!("dx = {dx:?}");
+    println!("dy = {dy:?}");
 
     assert_eq!(*f.eval(), 10.);
     //assert_eq!(Node(dx).eval(), 7.);
