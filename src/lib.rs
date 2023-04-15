@@ -1,3 +1,12 @@
+//! A library for automatic differentiation.
+//!
+//! # TODO
+//! - [ ] separate `Mul` and `MatMul`
+//! - [X] `.derivative()` should only take one gradient
+//! - [ ] `exp` operator
+//! - [ ] `sum` operator
+//! - [ ] `div` operator
+
 #![feature(test, array_zip)]
 
 use std::fmt::Debug;
@@ -31,9 +40,10 @@ impl<'a, N: Differentiable<'a>> Differentiable<'a> for Node<N> {
 
     fn derivative<'d, const LEN: usize, D: Clone>(
         &'a self,
-        k: [(&str, D); LEN],
+        k: [&str; LEN],
+        d: D,
     ) -> [Self::Δ<D>; LEN] {
-        self.0.derivative(k)
+        self.0.derivative(k, d)
     }
 
     fn is_zero(&self) -> bool {
@@ -48,13 +58,14 @@ impl<'a, N: Differentiable<'a>> Node<N> {
 }
 
 pub trait Differentiable<'a> {
-    type Δ<T>
+    type Δ<D>
     where
         Self: 'a;
     type T;
 
     fn eval(&self) -> Self::T;
-    fn derivative<const LEN: usize, D: Clone>(&'a self, k: [(&str, D); LEN]) -> [Self::Δ<D>; LEN];
+    fn derivative<const LEN: usize, D: Clone>(&'a self, k: [&str; LEN], d: D)
+        -> [Self::Δ<D>; LEN];
 
     fn symbol(self, symbol: &'static str) -> Node<Symbol<Self>>
     where
@@ -83,9 +94,10 @@ impl<'a, N: Differentiable<'a>> Differentiable<'a> for &N {
 
     fn derivative<'d, const LEN: usize, D: Clone>(
         &'a self,
-        k: [(&str, D); LEN],
+        k: [&str; LEN],
+        d: D,
     ) -> [Self::Δ<D>; LEN] {
-        (*self).derivative(k)
+        (*self).derivative(k, d)
     }
 
     fn is_zero(&self) -> bool {
@@ -100,7 +112,7 @@ fn basic() {
     let y = 3f32.symbol("y");
     let f = &x * &y + &x * &x;
 
-    let [dx, dy] = f.derivative([("x", One), ("y", One)]);
+    let [dx, dy] = f.derivative(["x", "y"], 1f32);
 
     println!("f  = {f:?}");
     //println!("dx = {dx:?}");

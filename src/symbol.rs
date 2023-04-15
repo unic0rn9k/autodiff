@@ -27,8 +27,12 @@ impl<'a, N: Differentiable<'a> + 'a> Differentiable<'a> for Symbol<N> {
         self.node.eval()
     }
 
-    fn derivative<const LEN: usize, D>(&'a self, k: [(&str, D); LEN]) -> [Self::Δ<D>; LEN] {
-        k.map(|(k, d)| Mul(if k == self.symbol { One } else { Zero }, d))
+    fn derivative<const LEN: usize, D: Clone>(
+        &'a self,
+        k: [&str; LEN],
+        d: D,
+    ) -> [Self::Δ<D>; LEN] {
+        k.map(|k| Mul(if k == self.symbol { One } else { Zero }, d.clone()))
     }
 
     fn is_zero(&self) -> bool {

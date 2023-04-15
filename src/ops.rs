@@ -1,3 +1,4 @@
+/// This module contains the implementations for the various operators
 use nalgebra::{ArrayStorage, Const, Matrix};
 
 use crate::{mat::MatrixNode, prelude::*, Node};
@@ -19,11 +20,12 @@ where
 
     fn derivative<'d, const LEN: usize, D: Clone>(
         &'a self,
-        k: [(&str, D); LEN],
+        k: [&str; LEN],
+        d: D,
     ) -> [Self::Δ<D>; LEN] {
         self.0
-            .derivative(k.clone())
-            .zip(self.1.derivative(k))
+            .derivative(k.clone(), d.clone())
+            .zip(self.1.derivative(k, d))
             .map(|(dx, dy)| Add(dx, dy))
     }
 
@@ -33,57 +35,71 @@ where
 }
 
 #[derive(Clone)]
+pub struct Sub<Lhs, Rhs>(pub Lhs, pub Rhs);
+
+impl<'a, L, R, LNode: Differentiable<'a, T = L>, RNode: Differentiable<'a, T = R>>
+    Differentiable<'a> for Sub<LNode, RNode>
+where
+    L: std::ops::Sub<R>,
+{
+    type Δ<T> = Sub<LNode::Δ<T>, RNode::Δ<T>> where Self: 'a;
+
+    type T = <L as std::ops::Sub<R>>::Output;
+
+    fn eval(&self) -> Self::T {
+        self.0.eval() - self.1.eval()
+    }
+
+    fn derivative<const LEN: usize, D: Clone>(
+        &'a self,
+        k: [&str; LEN],
+        d: D,
+    ) -> [Self::Δ<D>; LEN] {
+        self.0
+            .derivative(k.clone(), d.clone())
+            .zip(self.1.derivative(k, d))
+            .map(|(dx, dy)| Sub(dx, dy))
+    }
+
+    fn is_zero(&self) -> bool {
+        false
+    }
+}
+
+// (a*b)/c
+//
+#[derive(Clone)]
+pub struct Div<Lhs, Rhs>(pub Lhs, pub Rhs);
+
+impl<'a, L, R, LNode: Differentiable<'a, T = L>, RNode: Differentiable<'a, T = R>>
+    Differentiable<'a> for Div<LNode, RNode>
+where
+    L: std::ops::Div<R>,
+{
+    type Δ<D>
+    = Add<LNode::Δ<Div<D, Transpose<&'a RNode>>>, RNode::Δ<Mul<Transpose<&'a LNode>, D>>> where Self: 'a;
+
+    type T = <L as std::ops::Div<R>>::Output;
+
+    fn eval(&self) -> Self::T {
+        self.0.eval() / self.1.eval()
+    }
+
+    fn derivative<const LEN: usize, D: Clone>(
+        &'a self,
+        k: [&str; LEN],
+        d: D,
+    ) -> [Self::Δ<D>; LEN] {
+        todo!()
+    }
+
+    fn is_zero(&self) -> bool {
+        false
+    }
+}
+
+#[derive(Clone)]
 pub struct Mul<Lhs, Rhs>(pub Lhs, pub Rhs);
-
-// h(x) = w * x
-// y = f(h(x))
-//
-// dh/dw = w * x' + w' * x
-//
-// dy/dx = w^T * f'(h(x))
-// dy/dw = f'(h(x)) * x^T
-//
-// w2 * l1
-// l' = x^T
-// r' = 0
-//
-// l * l' + r' * r
-//
-// L^T * R' + L' * R^T
-//
-// w2 * (w1 * x)
-//
-// rhs  = (w1 * x)
-// rhs' = x
-//
-// lhs  = w2
-// lhs' = 0
-//
-// lhs_inner    + rhs * lhs'T
-// (rhs'T + lhs') * lhs +
-//
-// dx = w1^T * w2
-//
-// rhs' = w1
-// lhs = w2
-
-// x = [i, m]
-// y = [j, n]^T
-//
-// a(i) = i * j
-// b(m) = m * n
-//
-// x * y = [a(i), b(m)]
-//
-// ChatGPT says:
-// (dC/dx) = (dA/dx)B + A(dB/dx)
-
-// w2 * (w1 * x)
-//
-// ∇w2     = (w1 * x)T
-// ∇(w1*x) = w2T
-// ∇w1     = ∇(w1*x) * XT
-// ∇x      = w1T * ∇w2
 
 impl<'a, L, R, LNode: Differentiable<'a, T = L> + 'a, RNode: Differentiable<'a, T = R> + 'a>
     Differentiable<'a> for Mul<LNode, RNode>
@@ -97,12 +113,14 @@ where
         self.0.eval() * self.1.eval()
     }
 
-    fn derivative<const LEN: usize, D: Clone>(&'a self, k: [(&str, D); LEN]) -> [Self::Δ<D>; LEN] {
+    fn derivative<const LEN: usize, D: Clone>(
+        &'a self,
+        k: [&str; LEN],
+        d: D,
+    ) -> [Self::Δ<D>; LEN] {
         let Mul(x, y) = self;
-        let dx = self
-            .0
-            .derivative(k.clone().map(|(k, d)| (k, Mul(d, Transpose(y)))));
-        let dy = self.1.derivative(k.map(|(k, d)| (k, Mul(Transpose(x), d))));
+        let dx = self.0.derivative(k.clone(), Mul(d.clone(), Transpose(y)));
+        let dy = self.1.derivative(k, Mul(Transpose(x), d));
         dx.zip(dy).map(|(dx, dy)| Add(dx, dy))
     }
 
@@ -153,9 +171,10 @@ impl<'a, T: TransposeAble, N: Differentiable<'a, T = T>> Differentiable<'a> for 
 
     fn derivative<'d, const LEN: usize, D: Clone>(
         &'a self,
-        k: [(&str, D); LEN],
+        k: [&str; LEN],
+        d: D,
     ) -> [Self::Δ<D>; LEN] {
-        self.0.derivative(k).map(Transpose)
+        self.0.derivative(k, d).map(Transpose)
     }
 
     fn is_zero(&self) -> bool {

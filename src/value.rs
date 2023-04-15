@@ -23,7 +23,7 @@ impl<'a> Differentiable<'a> for Atom {
         *self
     }
 
-    fn derivative<const LEN: usize, D>(&'a self, _: [(&str, D); LEN]) -> [Self::Δ<D>; LEN] {
+    fn derivative<const LEN: usize, D>(&'a self, _: [&str; LEN], d: D) -> [Self::Δ<D>; LEN] {
         [Zero; LEN]
     }
 
@@ -57,7 +57,7 @@ macro_rules! impl_scalar {
                     NodeValue(*self)
                 }
 
-                fn derivative<const LEN: usize, D>(&'a self, _: [(&str, D); LEN]) -> [Self::Δ< D>; LEN] {
+                fn derivative<const LEN: usize, D>(&'a self, _: [&str; LEN], d:D) -> [Self::Δ< D>; LEN] {
                     [Zero; LEN]
                 }
 
