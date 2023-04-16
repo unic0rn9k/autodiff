@@ -23,11 +23,14 @@ mod symbol;
 
 mod mat;
 pub mod prelude;
+pub mod primitive_ops;
 #[cfg(test)]
 mod test;
 mod value;
 use ops::Transpose;
 pub use symbol::{symbol, Symbol};
+
+use crate::ops::{ElemMul, Neg};
 pub mod ops;
 
 #[derive(Clone)]
@@ -119,7 +122,8 @@ fn basic() {
     use crate::prelude::*;
     let x = 2f32.symbol("x");
     let y = 3f32.symbol("y");
-    let f = &x * &y + &x * &x;
+    let f = (&x * &y + &x * &x) / (&y + &x);
+    //let f = &x / &y;
 
     let [dx, dy] = f.derivative(["x", "y"], 1f32);
 
@@ -127,11 +131,16 @@ fn basic() {
     //println!("dx = {dx:?}");
     //println!("dy = {dy:?}");
 
-    assert_eq!(*f.eval(), 10.);
+    //assert_eq!(*f.eval(), 10.);
     //assert_eq!(Node(dx).eval(), 7.);
     //assert_eq!(Node(dy).eval(), 2.);
 
     //let x = symbol("x");
     //let f = x * 1.2f32;
     //assert_eq!(f.derivative(&["x"])[0], 1.2);
+
+    assert_eq!(dy.eval(), 0.);
+    assert!((dx.eval() - 1.).abs() < 1e-6, "{} != 1", dx.eval());
+
+    //Neg(&y).eval();
 }

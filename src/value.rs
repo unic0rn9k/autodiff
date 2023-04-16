@@ -1,5 +1,5 @@
+use crate::primitive_ops::*;
 use crate::Differentiable;
-use nalgebra::{ArrayStorage, Const, Dim, SMatrix};
 pub use nalgebra::{Matrix, Storage};
 use std::ops::*;
 
@@ -23,7 +23,7 @@ impl<'a> Differentiable<'a> for Atom {
         *self
     }
 
-    fn derivative<const LEN: usize, D>(&'a self, _: [&str; LEN], d: D) -> [Self::Δ<D>; LEN] {
+    fn derivative<const LEN: usize, D>(&'a self, _: [&str; LEN], _d: D) -> [Self::Δ<D>; LEN] {
         [Zero; LEN]
     }
 
@@ -57,7 +57,7 @@ macro_rules! impl_scalar {
                     NodeValue(*self)
                 }
 
-                fn derivative<const LEN: usize, D>(&'a self, _: [&str; LEN], d:D) -> [Self::Δ< D>; LEN] {
+                fn derivative<const LEN: usize, D>(&'a self, _: [&str; LEN], _d:D) -> [Self::Δ< D>; LEN] {
                     [Zero; LEN]
                 }
 
@@ -81,12 +81,12 @@ impl<T> Deref for NodeValue<T> {
 }
 
 macro_rules! impl_node_val_ops {
-    ($($op:ident:$Op:ident $o:tt),*) => {$(
+    ($($op:ident:$Op:ident)*) => {$(
         impl<L: $Op<R>, R> $Op<NodeValue<R>> for NodeValue<L> {
             type Output = NodeValue<<L as $Op<R>>::Output>;
 
             fn $op(self, rhs: NodeValue<R>) -> Self::Output {
-                NodeValue(self.0 $o rhs.0)
+                NodeValue(self.0.$op(rhs.0))
             }
         }
 
@@ -94,7 +94,7 @@ macro_rules! impl_node_val_ops {
             type Output = T;
 
             fn $op(self, rhs: Atom) -> Self::Output {
-                self.0 $o T::from(rhs)
+                self.0.$op(T::from(rhs))
             }
         }
 
@@ -102,21 +102,37 @@ macro_rules! impl_node_val_ops {
             type Output = T;
 
             fn $op(self, rhs: NodeValue<T>) -> Self::Output {
-                T::from(self) $o rhs.0
+                T::from(self).$op(rhs.0)
             }
         }
 
         impl $Op<Atom> for Atom{
             type Output = Atom;
-            fn $op(self, rhs: Atom) -> Atom{
-                match (self, rhs){
-                    (One, One) => One,
-                    _ => Zero
-                }
+            fn $op(self, _rhs: Atom) -> Atom{
+                //match (self, rhs){
+                //    (One, One) => One,
+                //    _ => Zero
+                //}
+                unimplemented!()
             }
         }
 
     )*};
 }
 
-impl_node_val_ops!(add:Add+, mul:Mul*);
+impl_node_val_ops!(add:Add mul:Mul sub:Sub div:Div elem_mul:ElemMul);
+
+impl Neg for Atom {
+    type Output = Atom;
+
+    fn neg(self) -> Self::Output {
+        panic!("Can't negate an atom")
+    }
+}
+impl<T: Neg> Neg for NodeValue<T> {
+    type Output = NodeValue<<T as Neg>::Output>;
+
+    fn neg(self) -> Self::Output {
+        NodeValue(-self.0)
+    }
+}
