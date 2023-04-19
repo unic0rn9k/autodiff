@@ -38,7 +38,7 @@ impl<'a> Differentiable<'a> for Atom {
 pub trait Scalar: From<Atom> {}
 
 macro_rules! impl_scalar {
-    ($($t: ty)*) => {$(
+    ($($t: ident)*) => {$(
         impl From<Atom> for $t {
             fn from(n: Atom) -> Self {
                 match n{
@@ -91,48 +91,66 @@ macro_rules! impl_node_val_ops {
         }
 
         impl<T: Scalar + $Op<Output=T>> $Op<Atom> for NodeValue<T>{
-            type Output = T;
+            type Output = NodeValue<T>;
 
             fn $op(self, rhs: Atom) -> Self::Output {
-                self.0.$op(T::from(rhs))
+                NodeValue(self.0.$op(T::from(rhs)))
             }
         }
 
         impl<T: Scalar + $Op<Output=T>> $Op<NodeValue<T>> for Atom{
-            type Output = T;
+            type Output = NodeValue<T>;
 
             fn $op(self, rhs: NodeValue<T>) -> Self::Output {
-                T::from(self).$op(rhs.0)
+                NodeValue(T::from(self).$op(rhs.0))
             }
         }
-
-        impl $Op<Atom> for Atom{
-            type Output = Atom;
-            fn $op(self, _rhs: Atom) -> Atom{
-                //match (self, rhs){
-                //    (One, One) => One,
-                //    _ => Zero
-                //}
-                unimplemented!()
-            }
-        }
-
     )*};
 }
 
 impl_node_val_ops!(add:Add mul:Mul sub:Sub div:Div elem_mul:ElemMul);
 
-impl Neg for Atom {
-    type Output = Atom;
-
-    fn neg(self) -> Self::Output {
-        panic!("Can't negate an atom")
-    }
-}
 impl<T: Neg> Neg for NodeValue<T> {
     type Output = NodeValue<<T as Neg>::Output>;
 
     fn neg(self) -> Self::Output {
         NodeValue(-self.0)
+    }
+}
+
+impl<T: Exp> Exp for NodeValue<T> {
+    type Output = NodeValue<<T as Exp>::Output>;
+
+    fn exp(self) -> Self::Output {
+        NodeValue(self.0.exp())
+    }
+}
+
+impl Mul<Atom> for Atom {
+    type Output = Atom;
+
+    fn mul(self, rhs: Atom) -> Self::Output {
+        match (self, rhs) {
+            (One, One) => One,
+            _ => Zero,
+        }
+    }
+}
+
+impl Add<Atom> for Atom {
+    type Output = Atom;
+
+    fn add(self, rhs: Atom) -> Self::Output {
+        match (self, rhs) {
+            (Zero, _) => rhs,
+            (_, Zero) => self,
+            (One, One) => panic!("Atom overflow"),
+        }
+    }
+}
+
+impl MulAssign for Atom {
+    fn mul_assign(&mut self, rhs: Self) {
+        *self = *self * rhs;
     }
 }
