@@ -133,28 +133,6 @@ fn basic() {
     assert!((dx.eval().0 - 1.).abs() < 1e-6, "{} != 1", dx.eval().0);
 }
 
-// # Expected output
-// sum = exp(x_0) + exp(x_1) + ... + exp(x_n)
-// softmax(x_n) = exp(x_n) / sum
-//
-// softmax'(x_n) = softmax(x_n) * (1 - softmax(x_n))
-//
-// f(x)/g(x) -> (f'(x)g(x) - f(x)g'(x)) / g(x)^2
-// exp(x) / sum -> (exp(x) * sum - exp(x) * exp(x)) / sum^2
-//
-// # Actual output
-// ((One
-// * ((1.0
-// / Sum(Exp(@("x"= [4x1] ))))
-// .* Exp(@("x"= [4x1] ))))
-// - Sum((One
-// * (((Exp(@("x"= [4x1] ))
-// / (Sum(Exp(@("x"= [4x1] )))
-// .* Sum(Exp(@("x"= [4x1] )))))
-// .* 1.0)
-// .* Exp(@("x"= [4x1] ))))))
-//
-// = 1/sum * exp(x) - exp(x) / sum^2
 #[test]
 fn softmax() {
     use crate::prelude::*;
