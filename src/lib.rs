@@ -95,6 +95,10 @@ pub trait Differentiable<'a> {
     }
 
     fn is_zero(&self) -> bool;
+
+    fn exp(&self) -> Node<crate::ops::Exp<&Self>> {
+        Node(crate::ops::Exp(self))
+    }
 }
 
 impl<'a, N: Differentiable<'a>> Differentiable<'a> for &N {
@@ -158,60 +162,47 @@ fn softmax() {
     use crate::prelude::*;
 
     let x = mat(nalgebra::DMatrix::from_column_slice(2, 1, &[1f32, 2f32])).symbol("x");
-    let xm = mat(nalgebra::DMatrix::from_column_slice(2, 1, &[1f32, 0f32])).symbol("x");
-    let ym = mat(nalgebra::DMatrix::from_column_slice(2, 1, &[0f32, 1f32])).symbol("x");
     let mm = mat(nalgebra::DMatrix::from_column_slice(2, 1, &[1f32, 1f32])).symbol("x");
 
-    let x1 = Node(Exp(1f32.symbol("x1")));
-    let x2 = Node(Exp(2f32.symbol("x2")));
+    let x1 = 1f32.symbol("x1");
+    let x2 = 2f32.symbol("x2");
 
-    assert_eq!(
-        Exp(&x).eval().0.unwrap().as_slice(),
-        &[x1.eval().0, x2.eval().0]
-    );
+    assert_eq!(x.eval().0.unwrap().as_slice(), &[x1.eval().0, x2.eval().0]);
 
-    let sum = &x1 + &x2;
-    let sm1 = &x1 / &sum;
-    let sm2 = &x2 / &sum;
+    let sum = x1.exp() + x2.exp();
+    let sm1 = x1.exp() / &sum;
+    let sm2 = x2.exp() / &sum;
     let [dsm1] = sm1.derivative(["x1"], 1f32);
     let [dsm2] = sm2.derivative(["x2"], 1f32);
-    let dsm = [dsm1.eval().0, dsm2.eval().0];
+    let dsm = nalgebra::matrix![dsm1.eval().0; dsm2.eval().0];
 
-    let sum = Sum(Exp(&x));
-    let softmax = Node(crate::ops::Div(Exp(&x), &sum));
-
-    println!("{:?}", dsm1);
+    let sum = Node(Sum(Exp(&x)));
+    let softmax = crate::ops::Div(Exp(&x), &sum);
 
     //println!("{:?}", softmax.0 .0.eval() / softmax.0 .1.eval());
 
-    let [dsoftmax] = softmax.derivative(["x"], mm);
-    let [ds1] = softmax.derivative(["x"], xm);
-    let [ds2] = softmax.derivative(["x"], ym);
+    let [dsoftmax] = softmax.derivative(["x"], 1f32);
+    assert!((dsoftmax.eval().0.unwrap() - dsm).abs().sum() < 1e-6);
 
-    //println!("{:?}", sum.eval_().0);
-    //println!("{:?}", softmax.eval_().0.unwrap());
-    //println!("{:?}", dsoftmax.eval_().0.unwrap());
-    //println!();
-    //println!("a: {dsoftmax:?}");
-    //println!();
-    //println!("b: {dsm1:?}");
-    //println!();
-    //println!("[{:?}, {:?}]", ds1.eval_().0, ds2.eval_().0);
+    // = 1/sum * exp(y) - exp(y) / sum^2
+    let manual = (x2.exp() * &sum - x2.exp() * x2.exp()) / (&sum * &sum);
+    let manual2 = (Node(1f32) / &sum * x2.exp() - x2.exp() * x2.exp()) / (&sum * &sum);
 
-    dsoftmax.eval();
+    // CAS derivation:
+    // e^y/(e^x + e^y) - e^(2*y)/(e^x + e^y)^2
+    let bruh = x2.exp() / &sum - Node(Exp(Node(2f32) * &x2)) / (&sum * &sum);
 
-    // 0.03103084923581511
-    // 0.0795501864530196
-    // 0.1807693485836927
-    // 0.22928868580089717
+    // 1 -> div(exp(y), sum) => lhs' - rhs'
+    // lhs': 1/sum -> exp(y) => exp(y) / sum
+    // rhs': exp(y) / (sum .* sum) .* 1 -> sum => sum(expx', expy')
 
-    //let x = mat(nalgebra::DMatrix::from_column_slice(
-    //    4,
-    //    1,
-    //    &[1f32, 2., 3., 4.],
-    //));
-
-    //crate::primitive_ops::Exp::exp(x);
+    println!("{:?}", dsoftmax.eval().0);
+    println!("{:?}", manual.eval().0);
+    println!("{:?}", manual2.eval().0);
+    println!("{:?}", bruh.eval().0);
+    println!();
+    println!("{:?}", x.exp().derivative(["x"], 1f32)[0].eval().0);
+    println!("{:?}", Sum(x.exp()).derivative(["x"], &mm)[0].eval().0);
 }
 
 #[test]
@@ -246,9 +237,13 @@ fn div() {
     let f2 = &y / (&y + &x);
     let [dx, _] = f1.derivative(["x", "y"], 1f32);
     let [_, dy] = f2.derivative(["x", "y"], 1f32);
+    let dxv = dx.eval().0;
+    let dxy = dy.eval().0;
 
     println!("{dx:?}");
     println!("{dy:?}");
-    println!("{:?}", dx.eval().0);
-    println!("{:?}", dy.eval().0);
+    println!("{dxv:?}");
+    println!("{dxy:?}");
+    assert!(dxv - 0.2222222 < 1e-6);
+    assert!(dxy - 0.1111111 < 1e-6);
 }

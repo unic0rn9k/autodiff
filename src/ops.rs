@@ -252,7 +252,7 @@ impl<'a, T: Scalar + Copy + std::iter::Sum, N: Differentiable<'a, T = MatrixNode
 where
     DefaultAllocator: Allocator<T, Dyn, Dyn>,
 {
-    type Δ<D> = Sum<N::Δ<D>>where Self: 'a;
+    type Δ<D> = N::Δ<D> where Self: 'a;
     type T = NodeValue<T>;
 
     fn eval(&self) -> Self::T {
@@ -270,7 +270,7 @@ where
         k: [&str; LEN],
         d: D,
     ) -> [Self::Δ<D>; LEN] {
-        self.0.derivative(k, d).map(Sum)
+        self.0.derivative(k, d)
     }
 
     fn is_zero(&self) -> bool {
