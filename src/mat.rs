@@ -1,8 +1,7 @@
-use crate::ops::Transpose;
 use crate::value::Atom;
-use crate::{prelude::*, value, Node};
+use crate::{prelude::*, value};
 use nalgebra::allocator::Allocator;
-use nalgebra::{DMatrix, DefaultAllocator, Dyn, OMatrix};
+use nalgebra::{DefaultAllocator, Dyn, OMatrix};
 use std::fmt::Debug;
 use std::ops::*;
 
@@ -81,7 +80,7 @@ impl<'a, T: Copy + PartialEq + std::fmt::Debug + 'static> Differentiable<'a> for
         self.clone()
     }
 
-    fn derivative<const LEN: usize, D>(&'a self, _: [&str; LEN], d: D) -> [Self::Δ<D>; LEN] {
+    fn derivative<const LEN: usize, D>(&'a self, _: [&str; LEN], _: D) -> [Self::Δ<D>; LEN] {
         [Zero; LEN]
     }
 

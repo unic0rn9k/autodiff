@@ -5,3 +5,5 @@ pub use crate::{
     value::*,
     Differentiable,
 };
+
+pub use nalgebra::{self, matrix, DMatrix, Matrix};
