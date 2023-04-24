@@ -100,7 +100,8 @@ impl<'a, L, R, LNode: Differentiable<'a, T = L>, RNode: Differentiable<'a, T = R
 where
     L: std::ops::Div<R>,
 {
-    type Δ<D> = Add<LNode::Δ<Div<D, &'a RNode>>, RNode::Δ<ElemMul<Div<Neg<&'a LNode>, ElemMul<&'a RNode, &'a RNode>>, D>>> where Self: 'a;
+    // 1/y * dy/dx - x/y^2 * dy/dx
+    type Δ<D> = Sub<LNode::Δ<Div<D, &'a RNode>>, RNode::Δ<ElemMul<Div<&'a LNode, ElemMul<&'a RNode, &'a RNode>>, D>>> where Self: 'a;
 
     type T = <L as std::ops::Div<R>>::Output;
 
@@ -113,13 +114,10 @@ where
         k: [&str; LEN],
         d: D,
     ) -> [Self::Δ<D>; LEN] {
-        self.0
-            .derivative(k, Div(d.clone(), &self.1))
-            .zip(
-                self.1
-                    .derivative(k, ElemMul(Div(Neg(&self.0), ElemMul(&self.1, &self.1)), d)),
-            )
-            .map(|(dx, dy)| Add(dx, dy))
+        let Div(x, y) = self;
+        x.derivative(k, Div(d.clone(), y))
+            .zip(y.derivative(k, ElemMul(Div(x, ElemMul(y, y)), d)))
+            .map(|(dx, dy)| Sub(dx, dy))
     }
 
     fn is_zero(&self) -> bool {
@@ -150,9 +148,9 @@ where
         k: [&str; LEN],
         d: D,
     ) -> [Self::Δ<D>; LEN] {
-        self.0
-            .derivative(k, ElemMul(&self.1, d.clone()))
-            .zip(self.1.derivative(k, ElemMul(&self.0, d)))
+        let ElemMul(x, y) = self;
+        x.derivative(k, ElemMul(y, d.clone()))
+            .zip(self.1.derivative(k, ElemMul(x, d)))
             .map(|(dx, dy)| Add(dx, dy))
     }
 
@@ -237,6 +235,7 @@ impl<'a, T: TransposeAble, N: Differentiable<'a, T = T>> Differentiable<'a> for 
         k: [&str; LEN],
         d: D,
     ) -> [Self::Δ<D>; LEN] {
+        // Maybe transpose d here?
         self.0.derivative(k, d).map(Transpose)
     }
 
@@ -245,12 +244,74 @@ impl<'a, T: TransposeAble, N: Differentiable<'a, T = T>> Differentiable<'a> for 
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct Sum<N>(pub N);
+
+impl<'a, T: Scalar + Copy + std::iter::Sum, N: Differentiable<'a, T = MatrixNode<T>>>
+    Differentiable<'a> for Sum<N>
+where
+    DefaultAllocator: Allocator<T, Dyn, Dyn>,
+{
+    type Δ<D> = N::Δ<D> where Self: 'a;
+    type T = NodeValue<T>;
+
+    fn eval(&self) -> Self::T {
+        NodeValue(
+            self.0
+                .eval()
+                .0
+                .map(|m| m.iter().copied().sum())
+                .unwrap_or(T::from(Zero)),
+        )
+    }
+
+    fn derivative<const LEN: usize, D: Clone>(
+        &'a self,
+        k: [&str; LEN],
+        d: D,
+    ) -> [Self::Δ<D>; LEN] {
+        self.0.derivative(k, d)
+    }
+
+    fn is_zero(&self) -> bool {
+        false
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Exp<N>(pub N);
+
+impl<'a, N: Differentiable<'a>> Differentiable<'a> for Exp<N>
+where
+    N::T: crate::primitive_ops::Exp,
+{
+    type Δ<D> = N::Δ<ElemMul<D,&'a Self>> where Self: 'a;
+
+    type T = <N::T as crate::primitive_ops::Exp>::Output;
+
+    fn eval(&self) -> Self::T {
+        crate::primitive_ops::Exp::exp(self.0.eval())
+    }
+
+    fn derivative<const LEN: usize, D: Clone>(
+        &'a self,
+        k: [&str; LEN],
+        d: D,
+    ) -> [Self::Δ<D>; LEN] {
+        self.0.derivative(k, ElemMul(d, self))
+    }
+
+    fn is_zero(&self) -> bool {
+        false
+    }
+}
+
 macro_rules! impl_debug {
-    ($($op: tt $name: ident),*) => {
+    ($($op: literal $name: ident),*) => {
         $(impl<'a, Lhs: std::fmt::Debug, Rhs: std::fmt::Debug> std::fmt::Debug for $name<Lhs, Rhs> where Self: Differentiable<'a>{
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 if self.is_zero(){write!(f,"Zero")}else{
-                    write!(f, "({:?} {} {:?})", self.0, stringify!($op), self.1)
+                    write!(f, "({:?} \n{} {:?})", self.0, $op, self.1)
                 }
             }
         })*
@@ -282,4 +343,4 @@ macro_rules! impl_op {
 }
 
 impl_op!(Add:add Mul:mul Sub:sub Div:div);
-impl_debug!(*Mul, +Add, -Sub, /Div);
+impl_debug!("*" Mul, "+" Add, "-" Sub, "/" Div, ".*" ElemMul);

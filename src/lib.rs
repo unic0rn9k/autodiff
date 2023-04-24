@@ -29,8 +29,6 @@ mod test;
 mod value;
 use ops::Transpose;
 pub use symbol::{symbol, Symbol};
-
-use crate::ops::{ElemMul, Neg};
 pub mod ops;
 
 #[derive(Clone)]
@@ -76,6 +74,7 @@ pub trait Differentiable<'a> {
     type T;
 
     fn eval(&self) -> Self::T;
+
     fn derivative<const LEN: usize, D: Clone>(&'a self, k: [&str; LEN], d: D)
         -> [Self::Δ<D>; LEN];
 
@@ -94,6 +93,10 @@ pub trait Differentiable<'a> {
     }
 
     fn is_zero(&self) -> bool;
+
+    fn exp(&self) -> Node<crate::ops::Exp<&Self>> {
+        Node(crate::ops::Exp(self))
+    }
 }
 
 impl<'a, N: Differentiable<'a>> Differentiable<'a> for &N {
@@ -123,24 +126,83 @@ fn basic() {
     let x = 2f32.symbol("x");
     let y = 3f32.symbol("y");
     let f = (&x * &y + &x * &x) / (&y + &x);
-    //let f = &x / &y;
 
     let [dx, dy] = f.derivative(["x", "y"], 1f32);
 
-    println!("f  = {f:?}");
-    //println!("dx = {dx:?}");
-    //println!("dy = {dy:?}");
+    assert_eq!(dy.eval().0, 0.);
+    assert!((dx.eval().0 - 1.).abs() < 1e-6, "{} != 1", dx.eval().0);
+}
 
-    //assert_eq!(*f.eval(), 10.);
-    //assert_eq!(Node(dx).eval(), 7.);
-    //assert_eq!(Node(dy).eval(), 2.);
+#[test]
+fn softmax() {
+    use crate::prelude::*;
 
-    //let x = symbol("x");
-    //let f = x * 1.2f32;
-    //assert_eq!(f.derivative(&["x"])[0], 1.2);
+    fn delta_softmax(x: &mut [f32]) {
+        let sum: f32 = x.iter().map(|x| x.exp().eval().0).sum();
+        for x in x {
+            let d = x.exp() / sum;
+            *x = d * (1. - d)
+        }
+    }
 
-    assert_eq!(dy.eval(), 0.);
-    assert!((dx.eval() - 1.).abs() < 1e-6, "{} != 1", dx.eval());
+    let mut x_src = [1f32, 2., 3., 4., 2.5, 3.8];
 
-    //Neg(&y).eval();
+    let x = mat(nalgebra::DMatrix::from_column_slice(
+        x_src.len(),
+        1,
+        &x_src.clone(),
+    ))
+    .symbol("x");
+
+    let sum = Node(Sum(Exp(&x)));
+    let softmax = crate::ops::Div(Exp(&x), &sum);
+    let [dsoftmax] = softmax.derivative(["x"], 1f32);
+
+    delta_softmax(&mut x_src);
+    let dsoftmax_true = nalgebra::DMatrix::from_column_slice(x_src.len(), 1, &x_src);
+
+    assert!((dsoftmax.eval().0.unwrap() - dsoftmax_true).abs().sum() < 1e-6);
+}
+
+#[test]
+fn exp() {
+    use crate::{ops::ElemMul, prelude::*};
+
+    let x = mat(nalgebra::DMatrix::from_column_slice(
+        4,
+        1,
+        &[1f32, 2., 3., 4.],
+    ))
+    .symbol("x");
+
+    let exp = Node(Exp(&x * 4f32 + 1f32)) * 5f32;
+    let dexp = ElemMul(20f32, Exp(&x * 4f32 + 1f32));
+
+    let [dexp2] = exp.derivative(["x"], 1f32);
+    assert_eq!(
+        dexp.eval().0.unwrap().as_slice(),
+        dexp2.eval().0.unwrap().as_slice()
+    )
+}
+
+#[test]
+fn div() {
+    use crate::prelude::*;
+
+    let x = 1f32.symbol("x");
+    let y = 2f32.symbol("y");
+
+    let f1 = &x / (&y + &x);
+    let f2 = &y / (&y + &x);
+    let [dx, _] = f1.derivative(["x", "y"], 1f32);
+    let [_, dy] = f2.derivative(["x", "y"], 1f32);
+    let dxv = dx.eval().0;
+    let dxy = dy.eval().0;
+
+    println!("{dx:?}");
+    println!("{dy:?}");
+    println!("{dxv:?}");
+    println!("{dxy:?}");
+    assert!(dxv - 0.2222222 < 1e-6);
+    assert!(dxy - 0.1111111 < 1e-6);
 }

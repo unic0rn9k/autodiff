@@ -1,8 +1,7 @@
-use crate::ops::Transpose;
 use crate::value::Atom;
-use crate::{prelude::*, value, Node};
+use crate::{prelude::*, value};
 use nalgebra::allocator::Allocator;
-use nalgebra::{DMatrix, DefaultAllocator, Dyn, OMatrix};
+use nalgebra::{DefaultAllocator, Dyn, OMatrix};
 use std::fmt::Debug;
 use std::ops::*;
 
@@ -81,7 +80,7 @@ impl<'a, T: Copy + PartialEq + std::fmt::Debug + 'static> Differentiable<'a> for
         self.clone()
     }
 
-    fn derivative<const LEN: usize, D>(&'a self, _: [&str; LEN], d: D) -> [Self::Δ<D>; LEN] {
+    fn derivative<const LEN: usize, D>(&'a self, _: [&str; LEN], _: D) -> [Self::Δ<D>; LEN] {
         [Zero; LEN]
     }
 
@@ -103,6 +102,24 @@ where
             (None, Some(r)) => Some(r),
             (Some(l), None) => Some(l),
             (Some(l), Some(r)) => Some(l + r),
+        })
+    }
+}
+
+impl<T: 'static> Sub<MatrixNode<T>> for MatrixNode<T>
+where
+    OMatrix<T, Dyn, Dyn>: Sub<OMatrix<T, Dyn, Dyn>, Output = OMatrix<T, Dyn, Dyn>>,
+    DefaultAllocator: Allocator<T, Dyn, Dyn>,
+    T: std::ops::Neg<Output = T> + std::clone::Clone + std::cmp::PartialEq + std::fmt::Debug,
+{
+    type Output = MatrixNode<T>;
+
+    fn sub(self, rhs: MatrixNode<T>) -> Self::Output {
+        MatrixNode(match (self.0, rhs.0) {
+            (None, None) => None,
+            (None, Some(r)) => Some(r.map(|x| -x)),
+            (Some(l), None) => Some(l),
+            (Some(l), Some(r)) => Some(l - r),
         })
     }
 }
@@ -174,6 +191,41 @@ where
     DefaultAllocator: Allocator<T, Dyn, Dyn>,
 {
     MatrixNode(Some(m))
+}
+
+macro_rules! matrix_scalar_op {
+    //($($t:ty)* => $($op:ident:$Op:ident)*) => {$(
+    //    $(matrix_scalar_op!(for $t => $($op:$Op)*);)*
+    //)*};
+
+    (for $t:ty => $($op:ident:$Op:ident)*) => {$(
+        impl $Op<NodeValue<$t>> for MatrixNode<$t> {
+            type Output = MatrixNode<$t>;
+
+            fn $op(self, rhs: NodeValue<$t>) -> Self::Output {
+                MatrixNode(self.0.map(|m| m.map(|n| n.$op(rhs.0))))
+            }
+        }
+
+        impl $Op<MatrixNode<$t>> for NodeValue<$t> {
+            type Output = MatrixNode<$t>;
+
+            fn $op(self, rhs: MatrixNode<$t>) -> Self::Output {
+                MatrixNode(rhs.0.map(|m| m.map(|n| self.0.$op(n))))
+            }
+        }
+    )*};
+}
+
+matrix_scalar_op!(for f32 => add:Add mul:Mul div:Div sub:Sub);
+matrix_scalar_op!(for f64 => add:Add mul:Mul div:Div sub:Sub);
+
+impl Neg for MatrixNode<f32> {
+    type Output = MatrixNode<f32>;
+
+    fn neg(self) -> Self::Output {
+        MatrixNode(self.0.map(|m| -m))
+    }
 }
 
 #[test]
