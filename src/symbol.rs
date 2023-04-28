@@ -4,7 +4,7 @@ use std::fmt::Debug;
 #[derive(Clone)]
 pub struct Symbol<N> {
     symbol: &'static str,
-    node: N,
+    pub node: N,
 }
 
 impl<'a, N: Differentiable<'a> + Debug> Debug for Symbol<N> {

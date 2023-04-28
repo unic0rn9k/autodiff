@@ -3,7 +3,10 @@ name = "autodiff"
 version = "0.1.0"
 edition = "2021"
 
+[workspace]
+members = ["examples/*"]
+
 [dependencies]
-flame = "0.2.2"
-flamer = "0.4.0"
+#flame = "0.2.2"
+#flamer = "0.4.0"
 nalgebra = { version = "0.32.2", features = ["rand"] }

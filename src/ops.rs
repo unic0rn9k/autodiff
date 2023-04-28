@@ -2,6 +2,19 @@ use crate::{mat::MatrixNode, prelude::*, Node};
 /// This module contains the implementations for the various operators
 use nalgebra::{allocator::Allocator, DefaultAllocator, Dyn};
 
+fn zip_map<const LEN: usize, A, B, C>(a: [A; LEN], b: [B; LEN], f: impl Fn(A, B) -> C) -> [C; LEN] {
+    match a
+        .into_iter()
+        .zip(b.into_iter())
+        .map(|(a, b)| f(a, b))
+        .collect::<Vec<_>>()
+        .try_into()
+    {
+        Ok(v) => v,
+        Err(_) => unreachable!(),
+    }
+}
+
 #[derive(Clone)]
 pub struct Add<Lhs, Rhs>(pub Lhs, pub Rhs);
 
@@ -22,10 +35,11 @@ where
         k: [&str; LEN],
         d: D,
     ) -> [Self::Δ<D>; LEN] {
-        self.0
-            .derivative(k, d.clone())
-            .zip(self.1.derivative(k, d))
-            .map(|(dx, dy)| Add(dx, dy))
+        zip_map(
+            self.0.derivative(k, d.clone()),
+            self.1.derivative(k, d),
+            Add,
+        )
     }
 
     fn is_zero(&self) -> bool {
@@ -54,10 +68,11 @@ where
         k: [&str; LEN],
         d: D,
     ) -> [Self::Δ<D>; LEN] {
-        self.0
-            .derivative(k, d.clone())
-            .zip(self.1.derivative(k, d))
-            .map(|(dx, dy)| Sub(dx, dy))
+        zip_map(
+            self.0.derivative(k, d.clone()),
+            self.1.derivative(k, d),
+            Sub,
+        )
     }
 
     fn is_zero(&self) -> bool {
@@ -115,9 +130,11 @@ where
         d: D,
     ) -> [Self::Δ<D>; LEN] {
         let Div(x, y) = self;
-        x.derivative(k, Div(d.clone(), y))
-            .zip(y.derivative(k, ElemMul(Div(x, ElemMul(y, y)), d)))
-            .map(|(dx, dy)| Sub(dx, dy))
+        zip_map(
+            self.0.derivative(k, Div(d.clone(), y)),
+            self.1.derivative(k, ElemMul(Div(x, ElemMul(y, y)), d)),
+            Sub,
+        )
     }
 
     fn is_zero(&self) -> bool {
@@ -149,9 +166,11 @@ where
         d: D,
     ) -> [Self::Δ<D>; LEN] {
         let ElemMul(x, y) = self;
-        x.derivative(k, ElemMul(y, d.clone()))
-            .zip(self.1.derivative(k, ElemMul(x, d)))
-            .map(|(dx, dy)| Add(dx, dy))
+        zip_map(
+            self.0.derivative(k, ElemMul(y, d.clone())),
+            self.1.derivative(k, ElemMul(x, d)),
+            Add,
+        )
     }
 
     fn is_zero(&self) -> bool {
@@ -180,9 +199,11 @@ where
         d: D,
     ) -> [Self::Δ<D>; LEN] {
         let Mul(x, y) = self;
-        let dx = self.0.derivative(k, Mul(d.clone(), Transpose(y)));
-        let dy = self.1.derivative(k, Mul(Transpose(x), d));
-        dx.zip(dy).map(|(dx, dy)| Add(dx, dy))
+        zip_map(
+            self.0.derivative(k, Mul(d.clone(), Transpose(y))),
+            self.1.derivative(k, Mul(Transpose(x), d)),
+            Add,
+        )
     }
 
     fn is_zero(&self) -> bool {

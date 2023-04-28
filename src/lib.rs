@@ -16,8 +16,6 @@
 //! f(x)/g(x) -> (f'(x)g(x) - f(x)g'(x)) / g(x)^2
 //! exp(x) / sum -> (exp(x) * sum - exp(x) * exp(x)) / sum^2
 
-#![feature(test, array_zip)]
-
 use std::fmt::Debug;
 mod symbol;
 
