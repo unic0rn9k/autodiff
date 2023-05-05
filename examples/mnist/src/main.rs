@@ -56,19 +56,18 @@ fn main() {
         let y = &w * &x + &b;
         let y = y.exp() / Sum(y.exp());
 
-        //let out = y.eval().0.unwrap();
+        let out = y.eval().0.unwrap();
 
-        let target = mat(DMatrix::<f32>::from_iterator(
+        let target = DMatrix::<f32>::from_iterator(
             10,
             1,
             (0..10).map(|i| if i == trn_lbl[n] as usize { 1. } else { 0. }),
-        ));
-        let dy = (y - target) * 2f32;
-        //let dy = mat(2.
-        //    * (out.clone()
-        //        - target));
+        );
 
-        //println!("dy: {:?}", dy.0.as_ref().unwrap());
+        //let dy = (y - mat(target)) * 2f32; // Compiletime er over en time, hvis dette også skal være autodiff
+        let dy = mat(2.
+            * (out.clone()
+                - target));
 
         let [dw, db] = y.derivative(["w", "b"], dy);
         let dw = dw.eval().0.unwrap();
