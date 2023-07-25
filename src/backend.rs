@@ -1,4 +1,5 @@
 use crate::error::Result;
+#[cfg(feature = "cuda")]
 use cudarc::driver::safe;
 use std::sync::Arc;
 
@@ -50,9 +51,11 @@ impl<T: Clone> Backend<T> for CpuHeap {
     }
 }
 
+#[cfg(feature = "cuda")]
 /// A backend that uses the cudarc, for CUDA GPU support.
 pub struct Cuda(Arc<safe::CudaDevice>);
 
+#[cfg(feature = "cuda")]
 impl<T: cudarc::driver::ValidAsZeroBits + cudarc::driver::DeviceRepr + Unpin> Backend<T> for Cuda {
     type DevicePtr = safe::CudaSlice<T>;
 

@@ -3,9 +3,12 @@ name = "_02"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+cuda = ["cudarc"]
+
 [dependencies]
 bumpalo = "3.13.0"
-cudarc = { version = "0.9.9", features = ["f16"] }
+cudarc = { version = "0.9.9", features = ["f16"], optional = true }
 half = "2.2.1"
 matrixmultiply = "0.3.7"
 thiserror = "1.0.40"
