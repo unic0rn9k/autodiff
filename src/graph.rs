@@ -278,6 +278,13 @@ impl<T, B: Backend<T>> Graph<T, B> {
     {
         self.backend.dtoh(&self.data[m.0])
     }
+
+    pub fn get_matrix_mut<const R: usize, const C: usize>(
+        &mut self,
+        m: &Matrix<R, C>,
+    ) -> &mut B::DevicePtr {
+        &mut self.data[m.0]
+    }
 }
 
 impl<T, B: Backend<T>> Debug for Graph<T, B> {

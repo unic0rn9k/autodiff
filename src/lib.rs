@@ -5,10 +5,8 @@
 //! - [ ] impl matmul on gpu.
 //! - [ ] optimizations on compiled graph for equivalent expressions.
 //! - [X] optimize basic equivalent expressions.
-//!
-//! # Ya ya
-//! - [ ] write backend::Add trait. Like std::ops::Add, but also takes a backend.
-//! - [ ] impl backend::Add for Scalar.
+//! - [ ] Better pattern for getting and setting data in graph.
+//! - [ ] Miri CI
 //!
 //! # Operations
 //! - Matmul
@@ -44,7 +42,7 @@ fn matmul(a: &[f32], b: &[f32], m: usize, n: usize, k: usize) -> Vec<f32> {
 }
 
 #[test]
-fn basic() {
+fn basic_scalar() {
     use backend::*;
     use graph::*;
     use ops::*;
@@ -59,19 +57,43 @@ fn basic() {
     let z = z.compile(&mut graph);
     let z = graph.eval(&z);
     assert_eq!(graph.get_scalar(&z).unwrap(), 15., "{graph:?}");
+}
 
-    let mata: Vec<f32> = (0..12).map(|_| 1.).collect();
-    let matb: Vec<f32> = (0..20).map(|_| 10.).collect();
-    let matc = matmul(&mata, &matb, 3, 4, 5);
+#[test]
+fn basic_matrix() {
+    use backend::*;
+    use graph::*;
+    use ops::*;
+    use rand::random;
+
+    let mut graph: Graph<f32, CpuHeap> = graph::Graph::new(CpuHeap);
+
+    let mut mata: Vec<f32> = (0..12).map(|_| random()).collect();
+    let mut matb: Vec<f32> = (0..20).map(|_| random()).collect();
 
     let ma = graph.matrix::<3, 4>(mata).unwrap();
     let mb = graph.matrix::<4, 5>(matb).unwrap();
 
     let mc = ma.matmul(mb);
     let mc = mc.compile(&mut graph);
-    let mc = graph.eval(&mc);
 
-    assert_eq!(&matc[..], &graph.get_matrix(&mc).unwrap()[..]);
+    for _ in 0..500 {
+        mata = (0..12).map(|_| random()).collect();
+        matb = (0..20).map(|_| random()).collect();
+        let matc = matmul(&mata, &matb, 3, 4, 5);
+
+        graph.get_matrix_mut(&ma.0).copy_from_slice(&mata);
+        graph.get_matrix_mut(&mb.0).copy_from_slice(&matb);
+
+        let mc = graph.eval(&mc);
+        assert!(
+            matc.iter()
+                .zip(graph.get_matrix(&mc).unwrap().iter())
+                .map(|(a, b)| (a - b).abs())
+                .sum::<f32>()
+                < 1e-6
+        );
+    }
 }
 
 #[cfg(feature = "cuda")]

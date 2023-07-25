@@ -8,7 +8,6 @@ The idea is to be able to create optimized (compiled from expression trees) alge
 - GPU support
 - Blas and all that stuff
 
-# TODO
-- Safety, so you can't try to evaluate a node on a forrin graph
-- Make miri stop being mad at matmul
-- miri CI
+# MVP
+I'm working on implementing the different operations, on the different backends.
+After that, I'm going to implement backwards-autodiff.

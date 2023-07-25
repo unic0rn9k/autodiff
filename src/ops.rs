@@ -23,21 +23,68 @@ pub trait Op<T, B: Backend<T>> {
         Self: Sized;
 }
 
-#[derive(Clone, Copy)]
-pub struct Add<L, R, T> {
-    pub lhs: L,
-    pub rhs: R,
-    pub marker: PhantomData<T>,
+macro_rules! impl_dyadic {
+    ($($Name: ident)*) => {$(
+        #[derive(Clone, Copy)]
+        pub struct $Name<L, R, T> {
+            pub lhs: L,
+            pub rhs: R,
+            pub marker: PhantomData<T>,
+        }
+
+        impl<L, R, T: 'static> graph::Node for $Name<L, R, T>
+        where
+            L: graph::Node + 'static,
+            R: graph::Node + 'static,
+        {
+            fn hash(&self) -> graph::NodeHash {
+                graph::NodeHash::collect(self, [&self.lhs, &self.rhs])
+            }
+        }
+    )*};
 }
 
-impl<L, R, T: 'static> graph::Node for Add<L, R, T>
-where
-    L: graph::Node + 'static,
-    R: graph::Node + 'static,
-{
-    fn hash(&self) -> graph::NodeHash {
-        graph::NodeHash::collect(self, [&self.lhs, &self.rhs])
-    }
+macro_rules! impl_compile {
+    ($op:ident, $alloc:expr, $T:ident) => {
+        fn compile(
+            self,
+            graph: &mut graph::Graph<$T, CpuHeap>,
+        ) -> graph::NodeIndex<$T, CpuHeap, Self>
+        where
+            Self: Sized,
+        {
+            let $op {
+                lhs,
+                rhs,
+                marker: PhantomData,
+            } = &self;
+            let hashes = [
+                NodeHash::collect(&self, [lhs, rhs]),
+                NodeHash::collect(&self, [rhs, lhs]),
+            ];
+            let $op {
+                lhs,
+                rhs,
+                marker: PhantomData,
+            } = self;
+            let lhs = lhs.compile(graph);
+            let rhs = rhs.compile(graph);
+
+            unsafe {
+                graph
+                    .insert(
+                        $op {
+                            lhs,
+                            rhs,
+                            marker: PhantomData,
+                        },
+                        &hashes,
+                        $alloc,
+                    )
+                    .transmute()
+            }
+        }
+    };
 }
 
 macro_rules! impl_scalar_op {
@@ -66,80 +113,16 @@ macro_rules! impl_scalar_op {
                 id.as_scalar(exe)
             }
 
-            fn compile(self, graph: &mut graph::Graph<T, CpuHeap>) -> graph::NodeIndex<T, CpuHeap, Self>
-            where
-                Self: Sized,
-            {
-                let $op {
-                    lhs,
-                    rhs,
-                    marker: PhantomData,
-                } = &self;
-                let hashes = [
-                    NodeHash::collect(&self, [lhs, rhs]),
-                    NodeHash::collect(&self, [rhs, lhs]),
-                ];
-                let $op {
-                    lhs,
-                    rhs,
-                    marker: PhantomData,
-                } = self;
-                let lhs = lhs.compile(graph);
-                let rhs = rhs.compile(graph);
-
-                unsafe{
-                    graph
-                        .insert(
-                            $op {
-                                lhs,
-                                rhs,
-                                marker: PhantomData,
-                            },
-                            &hashes,
-                            |b| b.static_alloc::<1>(),
-                        )
-                        .transmute()
-                }
-            }
+            impl_compile!($op, |b| b.static_alloc::<1>(), T);
         }
     };
 }
 
-#[derive(Clone, Copy)]
-pub struct Mul<L, R, T> {
-    pub lhs: L,
-    pub rhs: R,
-    pub marker: PhantomData<T>,
-}
-
-impl<L, R, T: 'static> graph::Node for Mul<L, R, T>
-where
-    L: graph::Node + 'static,
-    R: graph::Node + 'static,
-{
-    fn hash(&self) -> graph::NodeHash {
-        graph::NodeHash::collect(self, [&self.lhs, &self.rhs])
-    }
-}
-
+impl_dyadic!(Add Sub Mul Div MatMul);
 impl_scalar_op!(Add, +);
+impl_scalar_op!(Sub, -);
 impl_scalar_op!(Mul, *);
-
-pub struct MatMul<L, R, T> {
-    pub lhs: L,
-    pub rhs: R,
-    pub marker: PhantomData<T>,
-}
-
-impl<L, R, T: 'static> graph::Node for MatMul<L, R, T>
-where
-    L: graph::Node + 'static,
-    R: graph::Node + 'static,
-{
-    fn hash(&self) -> graph::NodeHash {
-        graph::NodeHash::collect(self, [&self.lhs, &self.rhs])
-    }
-}
+impl_scalar_op!(Div, /);
 
 impl<L, R, const M: usize, const N: usize, const K: usize> Op<f32, CpuHeap>
     for MatMul<L, R, (Matrix<M, N>, Matrix<N, K>)>
@@ -194,38 +177,5 @@ where
         id.as_matrix(exe)
     }
 
-    fn compile(self, graph: &mut graph::Graph<f32, CpuHeap>) -> graph::NodeIndex<f32, CpuHeap, Self>
-    where
-        Self: Sized,
-    {
-        let MatMul {
-            lhs,
-            rhs,
-            marker: PhantomData,
-        } = &self;
-        let hashes = [
-            NodeHash::collect(&self, [lhs, rhs]),
-            NodeHash::collect(&self, [rhs, lhs]),
-        ];
-        let MatMul {
-            lhs,
-            rhs,
-            marker: PhantomData,
-        } = self;
-        let lhs = lhs.compile(graph);
-        let rhs = rhs.compile(graph);
-        unsafe {
-            graph
-                .insert(
-                    MatMul {
-                        lhs,
-                        rhs,
-                        marker: PhantomData,
-                    },
-                    &hashes,
-                    |b| b.alloc(M * K),
-                )
-                .transmute()
-        }
-    }
+    impl_compile!(MatMul, |b| b.alloc(M * K), f32);
 }
