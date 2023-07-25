@@ -15,9 +15,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    # Use Rust nightly
+    - uses: actions/checkout@v2
+    - name: Set up Rust
+      uses: actions-rs/toolchain@v1
       with:
-        rust-version: 'v1.73.0-nightly'
+        toolchain: nightly
+        override: true
     - name: Build
       run: cargo build --verbose
     - name: Run tests
