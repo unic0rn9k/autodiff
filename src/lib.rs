@@ -28,7 +28,6 @@ pub mod derivatives;
 pub mod error;
 pub mod expr;
 pub mod graph;
-pub mod mat;
 pub mod ops;
 
 #[cfg(test)]
