@@ -20,7 +20,7 @@ jobs:
         toolchain: nightly
         override: true
     - name: Debug
-      run: fd '/bin/grep _02 ./ -r' /
+      run: grep _02 ./ -r
     - name: Build
       run: cargo build --verbose
     - name: Run tests
