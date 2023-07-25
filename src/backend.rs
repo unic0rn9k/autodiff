@@ -1,7 +1,6 @@
 use crate::error::Result;
 #[cfg(feature = "cuda")]
 use cudarc::driver::safe;
-use std::sync::Arc;
 
 /// A backend is a device that can allocate and transfer data.
 /// Specifically all operations are implemented for a specific backend.
@@ -12,6 +11,12 @@ pub trait Backend<T> {
 
     /// Allocate `size_of::<T>() * elements` bytes of memory on self.
     fn alloc(&self, elements: usize) -> Result<Self::DevicePtr>;
+
+    /// Sometimes static allocations can be optimized on the backend.
+    /// In those cases, this function can be used.
+    fn static_alloc<const N: usize>(&self) -> Result<Self::DevicePtr> {
+        self.alloc(N)
+    }
 
     /// Copy `host` into `device`.
     fn htod_into(&self, host: Vec<T>, device: &mut Self::DevicePtr) -> Result<()>;
@@ -51,8 +56,8 @@ impl<T: Clone> Backend<T> for CpuHeap {
     }
 }
 
-#[cfg(feature = "cuda")]
 /// A backend that uses the cudarc, for CUDA GPU support.
+#[cfg(feature = "cuda")]
 pub struct Cuda(Arc<safe::CudaDevice>);
 
 #[cfg(feature = "cuda")]
