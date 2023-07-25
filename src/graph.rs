@@ -1,15 +1,9 @@
-use crate::{
-    backend::{Backend, CpuHeap},
-    error::Result,
-    expr::Expr,
-    ops::Op,
-};
+use crate::{backend::Backend, error::Result, expr::Expr, ops::Op};
 use std::{
     any::Any,
     collections::HashMap,
     fmt::{Debug, Formatter},
     marker::PhantomData,
-    mem::size_of,
     mem::transmute,
     sync::Arc,
 };
@@ -49,7 +43,7 @@ impl NodeHash {
 /// containing the output value of the node.
 pub struct CompiledNode<T, B: Backend<T>> {
     inner: Arc<dyn Any>,
-    data: usize,
+    data_id: usize,
     name: &'static str,
     marker: PhantomData<(T, B)>,
 }
@@ -105,7 +99,7 @@ impl<T, B: Backend<T>, N> NodeIndex<T, B, N> {
         N: Op<T, B, Output = Scalar>,
     {
         // TODO: What to do about this symbol?
-        Scalar(graph.nodes[self.id].data, "")
+        Scalar(graph.nodes[self.id].data_id, "")
     }
 
     /// Returns the node's output as a Matrix.
@@ -114,7 +108,7 @@ impl<T, B: Backend<T>, N> NodeIndex<T, B, N> {
         N: Op<T, B, Output = Matrix<R, C>>,
     {
         Matrix(
-            graph.nodes[self.id].data,
+            graph.nodes[self.id].data_id,
             MatrixMeta {
                 trans: false,
                 leading_dim: R,
@@ -127,11 +121,11 @@ impl<T, B: Backend<T>, N: Op<T, B> + 'static> Op<T, B> for NodeIndex<T, B, N> {
     type Output = N::Output;
     type Compiled = N;
 
-    fn eval(this: &N, id: &NodeIndex<T, B, Self>, exe: &mut Graph<T, B>) -> Self::Output {
-        todo!()
+    fn eval(_: &N, _: &NodeIndex<T, B, Self>, _: &mut Graph<T, B>) -> Self::Output {
+        unimplemented!()
     }
 
-    fn compile(self, graph: &mut Graph<T, B>) -> NodeIndex<T, B, Self>
+    fn compile(self, _: &mut Graph<T, B>) -> NodeIndex<T, B, Self>
     where
         Self: Sized,
     {
@@ -167,6 +161,7 @@ impl<T, B: Backend<T>> Graph<T, B> {
         &mut self,
         node: N,
         hashes: &[NodeHash],
+        alloc: impl Fn(&B) -> Result<B::DevicePtr>,
     ) -> NodeIndex<T, B, N> {
         let id = self.nodes.len();
 
@@ -176,16 +171,13 @@ impl<T, B: Backend<T>> Graph<T, B> {
             .unwrap_or(&hashes[0])
             .clone();
 
-        let data_id = self.data.len();
-        self.data.push(
-            self.backend
-                .alloc(size_of::<N::Output>() / size_of::<T>())
-                .unwrap(),
-        );
         let id = *self.cache.entry(hash.clone()).or_insert_with(|| {
+            let data_id = self.data.len();
+            self.data.push(alloc(&self.backend).unwrap());
+
             self.nodes.push(CompiledNode {
                 inner: Arc::new(node),
-                data: data_id,
+                data_id,
                 name: std::any::type_name::<N>(),
                 marker: PhantomData,
             });
@@ -260,7 +252,7 @@ impl<T, B: Backend<T>> Graph<T, B> {
     where
         N: Node,
     {
-        &self.data[self.nodes[node.id].data]
+        &self.data[self.nodes[node.id].data_id]
     }
 
     /// Get a mutable reference for the data of `node`.
@@ -268,7 +260,7 @@ impl<T, B: Backend<T>> Graph<T, B> {
     where
         N: Node,
     {
-        &mut self.data[self.nodes[node.id].data]
+        &mut self.data[self.nodes[node.id].data_id]
     }
 
     /// Get the value of a Scalar.
@@ -317,7 +309,7 @@ impl<T: 'static, B: Backend<T> + 'static> Op<T, B> for Scalar {
     type Output = Self;
     type Compiled = Self;
 
-    fn eval(this: &Self, id: &NodeIndex<T, B, Self>, _: &mut Graph<T, B>) -> Self::Output {
+    fn eval(this: &Self, _: &NodeIndex<T, B, Self>, _: &mut Graph<T, B>) -> Self::Output {
         *this
     }
 
@@ -326,7 +318,7 @@ impl<T: 'static, B: Backend<T> + 'static> Op<T, B> for Scalar {
         Self: Sized,
     {
         let hash = self.hash();
-        graph.insert(self, &[hash])
+        graph.insert(self, &[hash], |b| b.static_alloc::<1>())
     }
 }
 
@@ -359,7 +351,7 @@ impl<T: 'static, B: Backend<T> + 'static, const R: usize, const C: usize> Op<T, 
     type Output = Self;
     type Compiled = Self;
 
-    fn eval(this: &Self, id: &NodeIndex<T, B, Self>, _: &mut Graph<T, B>) -> Self::Output {
+    fn eval(this: &Self, _: &NodeIndex<T, B, Self>, _: &mut Graph<T, B>) -> Self::Output {
         *this
     }
 
@@ -368,6 +360,6 @@ impl<T: 'static, B: Backend<T> + 'static, const R: usize, const C: usize> Op<T, 
         Self: Sized,
     {
         let hash = self.hash();
-        graph.insert(self, &[hash])
+        graph.insert(self, &[hash], |b| b.alloc(R * C))
     }
 }

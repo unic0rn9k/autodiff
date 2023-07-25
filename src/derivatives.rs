@@ -1,4 +1,4 @@
-use crate::{backend::Backend, graph::Graph, ops::*};
+use crate::{backend::Backend, graph::Graph};
 
 pub trait Differentiable {
     type T;

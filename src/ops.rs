@@ -96,6 +96,7 @@ macro_rules! impl_scalar_op {
                                 marker: PhantomData,
                             },
                             &hashes,
+                            |b| b.static_alloc::<1>(),
                         )
                         .transmute()
                 }
@@ -222,6 +223,7 @@ where
                         marker: PhantomData,
                     },
                     &hashes,
+                    |b| b.alloc(M * K),
                 )
                 .transmute()
         }

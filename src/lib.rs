@@ -23,8 +23,6 @@
 
 #![feature(return_position_impl_trait_in_trait)]
 
-use std::marker::PhantomData;
-
 pub mod backend;
 pub mod derivatives;
 pub mod error;
@@ -33,6 +31,7 @@ pub mod graph;
 pub mod mat;
 pub mod ops;
 
+#[cfg(test)]
 fn matmul(a: &[f32], b: &[f32], m: usize, n: usize, k: usize) -> Vec<f32> {
     let mut c = vec![0.0; m * k];
     for i in 0..m {
@@ -50,8 +49,6 @@ fn basic() {
     use backend::*;
     use graph::*;
     use ops::*;
-    use rand;
-    use rand::random;
 
     let mut graph: Graph<f32, CpuHeap> = graph::Graph::new(CpuHeap);
 
@@ -71,14 +68,7 @@ fn basic() {
     let ma = graph.matrix::<3, 4>(mata).unwrap();
     let mb = graph.matrix::<4, 5>(matb).unwrap();
 
-    let mc = crate::expr::Expr(
-        MatMul {
-            rhs: mb,
-            lhs: ma,
-            marker: PhantomData,
-        },
-        PhantomData,
-    );
+    let mc = ma.matmul(mb);
     let mc = mc.compile(&mut graph);
     let mc = graph.eval(&mc);
 

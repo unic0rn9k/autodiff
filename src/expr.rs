@@ -60,4 +60,25 @@ macro_rules! impl_op {
     };
 }
 
+#[allow(type_alias_bounds)]
+type MM<E: Op<T, B>, E2: Op<T, B>, T, B: Backend<T>> =
+    Expr<crate::ops::MatMul<E, E2, (E::Output, E2::Output)>, T, B>;
+
 impl_op!(Add:add, Mul:mul);
+
+impl<E, T, B: Backend<T>> Expr<E, T, B> {
+    pub fn matmul<E2>(self, rhs: Expr<E2, T, B>) -> MM<E, E2, T, B>
+    where
+        E: Op<T, B>,
+        E2: Op<T, B>,
+    {
+        Expr(
+            crate::ops::MatMul {
+                lhs: self.0,
+                rhs: rhs.0,
+                marker: std::marker::PhantomData,
+            },
+            std::marker::PhantomData,
+        )
+    }
+}
