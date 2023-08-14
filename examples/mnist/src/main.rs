@@ -64,10 +64,9 @@ fn main() {
             (0..10).map(|i| if i == trn_lbl[n] as usize { 1. } else { 0. }),
         );
 
-        //let dy = (y - mat(target)) * 2f32; // Compiletime er over en time, hvis dette også skal være autodiff
-        let dy = mat(2.
-            * (out.clone()
-                - target));
+        // let dy = (y - mat(target)) * 2f32; // Compiletime er over en time, hvis dette også skal være autodiff
+
+        let dy = mat(2. * (out.clone() - target));
 
         let [dw, db] = y.derivative(["w", "b"], dy);
         let dw = dw.eval().0.unwrap();
@@ -91,6 +90,6 @@ fn main() {
             }
         }
 
-        println!("{n} accuracy: {:.2}%", correct as f32 / ntest as f32 * 100.,);
+        println!("{n} accuracy: {}%", correct as f32 / ntest as f32 * 100.,);
     }
 }
