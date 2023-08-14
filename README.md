@@ -32,3 +32,7 @@ To run the mnist classifier example, clone the repository, and run `cargo r --pa
     assert_eq!(dw2.eval().shape(), w2.eval().shape());
     assert_eq!(dw1.eval().shape(), w1.eval().shape());
 ```
+# Long compile times
+The repport also details some of the issues with leveraging GATs for autodiff, which lead me to try to rewrite the projekt on a new branch (`runtime-compiled-graphs`), where I instead use a structure for representing expressions, which can then be compiled into a evaluatable graph, at run time. The graph can then be reused for identical functions, with different values. This also allows for optimization of the mathematical expression, caching of computed values, an pruning of identical graph segments.
+
+One thing I wanted to work into this project, was GPU support, so `runtime-compiled-graphs` is build with multiple backends in mind, and is meant to have GPU support out of the box.
