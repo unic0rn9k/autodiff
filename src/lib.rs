@@ -1,3 +1,5 @@
+#![feature(test)]
+
 //! A library for automatic differentiation. [![Rust](https://github.com/unic0rn9k/autodiff/actions/workflows/rust.yml/badge.svg)](https://github.com/unic0rn9k/autodiff/actions/workflows/rust.yml)
 //!
 //! # TODO
